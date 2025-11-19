@@ -23,7 +23,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from app.ml.utils.mlflow_tracker import MLFlowTracker
+from analysis.utils.mlflow_tracker import MLFlowTracker
 from .fourier import FourierCyclicalDetector
 from .hmm import RegimeDetector
 from .dtw import DynamicTimeWarpingMatcher

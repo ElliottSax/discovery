@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Optional, Dict
 from datetime import datetime
 import logging
-from app.core.ml_config import ml_settings
+from config.ml_config import ml_settings
 
 logger = logging.getLogger(__name__)
 

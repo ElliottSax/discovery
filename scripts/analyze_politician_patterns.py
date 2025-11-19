@@ -12,8 +12,10 @@ Tracks everything to MLFlow for analysis.
 
 import sys
 import os
-sys.path.insert(0, 'quant/backend')
-os.chdir('quant/backend')
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 import numpy as np
@@ -22,12 +24,10 @@ from sqlalchemy import create_engine, text
 import warnings
 warnings.filterwarnings('ignore')
 
-from app.ml.cyclical import (
-    FourierCyclicalDetector,
-    RegimeDetector,
-    DynamicTimeWarpingMatcher,
-    CyclicalExperimentTracker
-)
+from analysis.cyclical.fourier import FourierCyclicalDetector
+from analysis.cyclical.hmm import RegimeDetector
+from analysis.cyclical.dtw import DynamicTimeWarpingMatcher
+from analysis.cyclical.experiment_tracker import CyclicalExperimentTracker
 
 # Database connection
 DATABASE_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
