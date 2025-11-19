@@ -77,7 +77,11 @@ class MLSettings(BaseSettings):
         description="Weights for ensemble models (auto if None)"
     )
 
-    # Cyclical Pattern Detection
+    # Cyclical Pattern Detection - Fourier
+    FOURIER_MIN_DATA_POINTS: int = Field(
+        default=30,
+        description="Minimum data points required for Fourier analysis"
+    )
     FOURIER_MIN_PERIOD: int = Field(
         default=5,
         description="Minimum period (days) to detect in Fourier analysis"
@@ -85,6 +89,26 @@ class MLSettings(BaseSettings):
     FOURIER_MAX_PERIOD: int = Field(
         default=365,
         description="Maximum period (days) to detect in Fourier analysis"
+    )
+    FOURIER_MIN_STRENGTH: float = Field(
+        default=0.1,
+        description="Minimum FFT power to consider a cycle significant"
+    )
+    FOURIER_MIN_CONFIDENCE: float = Field(
+        default=0.6,
+        description="Minimum confidence threshold for cycle detection (0-1)"
+    )
+    FOURIER_FORECAST_PERIODS: int = Field(
+        default=30,
+        description="Number of periods to forecast ahead"
+    )
+    FOURIER_TOP_CYCLES: int = Field(
+        default=10,
+        description="Number of top cycles to return"
+    )
+    FOURIER_PEAK_PROMINENCE: float = Field(
+        default=0.05,
+        description="Peak prominence for cycle detection (relative to min_strength)"
     )
 
     # HMM Configuration
@@ -95,6 +119,38 @@ class MLSettings(BaseSettings):
     HMM_N_ITERATIONS: int = Field(
         default=1000,
         description="Max iterations for HMM training"
+    )
+    HMM_MIN_DATA_POINTS: int = Field(
+        default=100,
+        description="Minimum data points for reliable HMM training"
+    )
+    HMM_COVARIANCE_TYPE: str = Field(
+        default="full",
+        description="Type of covariance parameters (spherical, diag, full, tied)"
+    )
+    HMM_VOLATILITY_WINDOW: int = Field(
+        default=20,
+        description="Window size for rolling volatility calculation"
+    )
+    HMM_MOMENTUM_WINDOW: int = Field(
+        default=20,
+        description="Window size for rolling momentum calculation"
+    )
+    HMM_HIGH_VOL_THRESHOLD: float = Field(
+        default=0.025,
+        description="Threshold for high volatility regime classification"
+    )
+    HMM_LOW_VOL_THRESHOLD: float = Field(
+        default=0.01,
+        description="Threshold for low volatility regime classification"
+    )
+    HMM_POSITIVE_RETURN_THRESHOLD: float = Field(
+        default=0.001,
+        description="Threshold for positive return classification"
+    )
+    HMM_NEGATIVE_RETURN_THRESHOLD: float = Field(
+        default=-0.001,
+        description="Threshold for negative return classification"
     )
 
     # LSTM Configuration
@@ -139,6 +195,106 @@ class MLSettings(BaseSettings):
     DTW_MIN_SIMILARITY: float = Field(
         default=0.7,
         description="Minimum similarity threshold (0-1)"
+    )
+    DTW_MIN_DATA_POINTS: int = Field(
+        default=120,
+        description="Minimum data points for DTW (window_size + outcome horizon)"
+    )
+    DTW_OUTCOME_HORIZON_30D: int = Field(
+        default=30,
+        description="Short-term outcome horizon in days"
+    )
+    DTW_OUTCOME_HORIZON_90D: int = Field(
+        default=90,
+        description="Long-term outcome horizon in days"
+    )
+    DTW_MAX_LAG: int = Field(
+        default=30,
+        description="Maximum lag for correlation analysis"
+    )
+    DTW_DISTANCE_SCALE: float = Field(
+        default=2.0,
+        description="Scale factor for distance-to-similarity conversion"
+    )
+
+    # Ensemble Configuration
+    ENSEMBLE_FOURIER_WEIGHT: float = Field(
+        default=0.35,
+        description="Base weight for Fourier predictions"
+    )
+    ENSEMBLE_HMM_WEIGHT: float = Field(
+        default=0.35,
+        description="Base weight for HMM predictions"
+    )
+    ENSEMBLE_DTW_WEIGHT: float = Field(
+        default=0.30,
+        description="Base weight for DTW predictions"
+    )
+    ENSEMBLE_MIN_CONFIDENCE: float = Field(
+        default=0.5,
+        description="Minimum confidence threshold for predictions"
+    )
+    ENSEMBLE_MIN_MODELS: int = Field(
+        default=1,
+        description="Minimum number of models required for ensemble"
+    )
+    ENSEMBLE_REGIME_CHANGE_THRESHOLD: int = Field(
+        default=7,
+        description="Days threshold for regime change prediction"
+    )
+    ENSEMBLE_CYCLE_PEAK_THRESHOLD: float = Field(
+        default=1.5,
+        description="Multiplier threshold for cycle peak detection"
+    )
+    ENSEMBLE_LARGE_CHANGE_THRESHOLD: float = Field(
+        default=10.0,
+        description="Threshold for large change alerts"
+    )
+    ENSEMBLE_ANOMALY_AGREEMENT_THRESHOLD: float = Field(
+        default=0.5,
+        description="Low agreement threshold for anomaly detection"
+    )
+
+    # Correlation Analysis
+    CORRELATION_SIGNIFICANCE_THRESHOLD: float = Field(
+        default=0.05,
+        description="P-value threshold for statistical significance"
+    )
+    CORRELATION_MIN_CORRELATION: float = Field(
+        default=0.5,
+        description="Minimum correlation for clustering/network edges"
+    )
+    CORRELATION_MIN_OVERLAP: int = Field(
+        default=30,
+        description="Minimum overlapping data points for correlation"
+    )
+    CORRELATION_CLUSTERING_METHOD: str = Field(
+        default="ward",
+        description="Hierarchical clustering linkage method"
+    )
+
+    # Numerical Stability
+    EPSILON: float = Field(
+        default=1e-8,
+        description="Small constant for numerical stability"
+    )
+    MIN_VARIANCE_THRESHOLD: float = Field(
+        default=1e-10,
+        description="Minimum variance threshold for valid time series"
+    )
+
+    # Statistical Testing
+    BOOTSTRAP_N_SAMPLES: int = Field(
+        default=1000,
+        description="Number of bootstrap samples for significance testing"
+    )
+    CONFIDENCE_INTERVAL: float = Field(
+        default=0.95,
+        description="Confidence interval level (0-1)"
+    )
+    CROSS_VALIDATION_SPLITS: int = Field(
+        default=5,
+        description="Number of cross-validation splits"
     )
 
     # Hyperparameter Tuning
