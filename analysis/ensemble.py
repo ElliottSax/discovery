@@ -22,11 +22,9 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 
-from app.ml.cyclical import (
-    FourierCyclicalDetector,
-    RegimeDetector,
-    DynamicTimeWarpingMatcher
-)
+from analysis.cyclical.fourier import FourierCyclicalDetector
+from analysis.cyclical.hmm import RegimeDetector
+from analysis.cyclical.dtw import DynamicTimeWarpingMatcher
 
 logger = logging.getLogger(__name__)
 

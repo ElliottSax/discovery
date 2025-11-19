@@ -5,7 +5,7 @@ from mlflow.tracking import MlflowClient
 from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
-from app.core.ml_config import ml_settings
+from config.ml_config import ml_settings
 
 logger = logging.getLogger(__name__)
 
