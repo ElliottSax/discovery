@@ -335,3 +335,74 @@ class FourierCyclicalDetector:
             summary += f"{period:.1f} days (confidence: {confidence:.1%})\n"
 
         return summary
+
+    def save(self, path: str, metadata: Optional[Dict] = None):
+        """
+        Save detector state to disk.
+
+        Args:
+            path: Path to save model (without extension)
+            metadata: Optional additional metadata
+
+        Example:
+            >>> detector = FourierCyclicalDetector()
+            >>> detector.detect_cycles(time_series)
+            >>> detector.save("models/fourier_detector_v1")
+        """
+        from analysis.utils.persistence import ModelPersistence
+        from datetime import datetime
+
+        # Prepare metadata
+        save_metadata = {
+            'min_strength': self.min_strength,
+            'min_confidence': self.min_confidence,
+            'n_cycles_detected': len(self.cycles_detected),
+            'saved_at': datetime.utcnow().isoformat()
+        }
+
+        # Add cycle information if available
+        if self.cycles_detected:
+            save_metadata['top_cycle'] = {
+                'period_days': self.cycles_detected[0]['period_days'],
+                'strength': self.cycles_detected[0]['strength'],
+                'confidence': self.cycles_detected[0]['confidence'],
+                'category': self.cycles_detected[0]['category']
+            }
+
+        # Merge with user metadata
+        if metadata:
+            save_metadata.update(metadata)
+
+        # Save using persistence framework
+        from pathlib import Path
+        ModelPersistence.save_model(self, Path(path), save_metadata)
+
+        logger.info(f"Saved FourierCyclicalDetector to {path}")
+
+    @classmethod
+    def load(cls, path: str) -> 'FourierCyclicalDetector':
+        """
+        Load detector from disk.
+
+        Args:
+            path: Path to saved model (without extension)
+
+        Returns:
+            Loaded FourierCyclicalDetector instance
+
+        Example:
+            >>> detector = FourierCyclicalDetector.load("models/fourier_detector_v1")
+            >>> print(f"Loaded detector with {len(detector.cycles_detected)} cycles")
+        """
+        from analysis.utils.persistence import ModelPersistence
+        from pathlib import Path
+
+        model, metadata = ModelPersistence.load_model(Path(path))
+
+        logger.info(f"Loaded FourierCyclicalDetector from {path}")
+        logger.info(f"Model saved at: {metadata.get('saved_at', 'unknown')}")
+
+        if 'top_cycle' in metadata:
+            logger.info(f"Top cycle: {metadata['top_cycle']}")
+
+        return model
