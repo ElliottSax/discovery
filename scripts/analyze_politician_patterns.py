@@ -12,6 +12,7 @@ Tracks everything to MLFlow for analysis.
 
 import sys
 import os
+import re
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -29,15 +30,61 @@ from analysis.cyclical.hmm import RegimeDetector
 from analysis.cyclical.dtw import DynamicTimeWarpingMatcher
 from analysis.cyclical.experiment_tracker import CyclicalExperimentTracker
 
-# Database connection
-DATABASE_URL = "postgresql://quant_user:quant_password@localhost:5432/quant_db"
-engine = create_engine(DATABASE_URL)
+# Database connection with environment variables
+import os
+
+DB_USER = os.getenv('DB_USER', 'quant_user')
+DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = os.getenv('DB_PORT', '5432')
+DB_NAME = os.getenv('DB_NAME', 'quant_db')
+
+if not DB_PASSWORD:
+    raise ValueError("Database password must be set via DB_PASSWORD environment variable")
+
+DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+# Create engine with connection pooling for better performance
+# Pool size: 5 connections, overflow: 10 additional connections if needed
+# Pool recycle: refresh connections every hour to prevent stale connections
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True,  # Verify connections before using
+    pool_recycle=3600,   # Recycle connections after 1 hour
+    echo=False           # Set to True for SQL query logging
+)
+
+
+def sanitize_name_for_mlflow(name: str) -> str:
+    """
+    Sanitize politician name for use in MLFlow experiment names.
+
+    Converts to lowercase, replaces spaces and special characters with underscores.
+    Handles names like "O'Brien", "Mary-Anne Smith", etc.
+
+    Args:
+        name: Original politician name
+
+    Returns:
+        Sanitized name safe for MLFlow experiments
+    """
+    # Convert to lowercase
+    sanitized = name.lower()
+    # Replace any non-alphanumeric characters (except underscores) with underscores
+    sanitized = re.sub(r'[^a-z0-9_]', '_', sanitized)
+    # Remove consecutive underscores
+    sanitized = re.sub(r'_+', '_', sanitized)
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip('_')
+    return sanitized
 
 
 def load_politician_trades(politician_name=None):
     """Load trades from database and prepare for analysis"""
 
-    query = """
+    base_query = """
     SELECT
         t.transaction_date,
         t.ticker,
@@ -50,11 +97,12 @@ def load_politician_trades(politician_name=None):
     """
 
     if politician_name:
-        query += f" WHERE p.name = '{politician_name}'"
-
-    query += " ORDER BY t.transaction_date"
-
-    df = pd.read_sql(query, engine)
+        # Use parameterized query to prevent SQL injection
+        query = text(base_query + " WHERE p.name = :politician_name ORDER BY t.transaction_date")
+        df = pd.read_sql(query, engine, params={"politician_name": politician_name})
+    else:
+        query = base_query + " ORDER BY t.transaction_date"
+        df = pd.read_sql(query, engine)
     df['transaction_date'] = pd.to_datetime(df['transaction_date'])
 
     return df
@@ -104,7 +152,7 @@ def analyze_politician(politician_name):
 
     # Initialize tracker
     tracker = CyclicalExperimentTracker(
-        experiment_name=f"politician_analysis_{politician_name.replace(' ', '_').lower()}"
+        experiment_name=f"politician_analysis_{sanitize_name_for_mlflow(politician_name)}"
     )
 
     results = {}
@@ -226,55 +274,67 @@ def main():
     print("Using Cyclical Detection Models: Fourier, HMM, DTW")
     print("=" * 80)
 
-    # Get list of politicians
-    query = "SELECT DISTINCT name FROM politicians ORDER BY name"
-    politicians = pd.read_sql(query, engine)['name'].tolist()
+    try:
+        # Get list of politicians
+        query = "SELECT DISTINCT name FROM politicians ORDER BY name"
+        politicians = pd.read_sql(query, engine)['name'].tolist()
 
-    print(f"\nFound {len(politicians)} politicians:")
-    for pol in politicians:
-        print(f"  - {pol}")
+        print(f"\nFound {len(politicians)} politicians:")
+        for pol in politicians:
+            print(f"  - {pol}")
 
-    all_results = {}
+        all_results = {}
 
-    # Analyze each politician
-    for politician in politicians:
+        # Analyze each politician
+        for politician in politicians:
+            try:
+                results = analyze_politician(politician)
+                if results:
+                    all_results[politician] = results
+            except Exception as e:
+                print(f"\n✗ Failed to analyze {politician}: {e}")
+                import traceback
+                traceback.print_exc()
+
+        # Summary
+        print("\n" + "=" * 80)
+        print("ANALYSIS COMPLETE")
+        print("=" * 80)
+
+        print(f"\nAnalyzed {len(all_results)} politicians")
+        print("\nKey Findings:")
+
+        for politician, results in all_results.items():
+            print(f"\n{politician}:")
+
+            if 'fourier' in results:
+                cycles = results['fourier']['dominant_cycles']
+                if cycles:
+                    top_cycle = cycles[0]
+                    print(f"  • Dominant cycle: {top_cycle['period_days']:.0f} days ({top_cycle['category']})")
+
+            if 'hmm' in results:
+                regime = results['hmm']['current_regime_name']
+                print(f"  • Current regime: {regime}")
+
+            if 'dtw' in results and results['dtw']['matches']:
+                pred = results['dtw']['prediction']
+                print(f"  • 30-day prediction: {pred['predicted_return']:+.1f} trades (confidence: {pred['confidence']:.0%})")
+
+        print(f"\n✓ All experiments tracked to MLFlow")
+        print("  View at: http://localhost:5000")
+        print("\n" + "=" * 80)
+
+    except Exception as e:
+        print(f"\n✗ Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Ensure database connections are properly closed
         try:
-            results = analyze_politician(politician)
-            if results:
-                all_results[politician] = results
-        except Exception as e:
-            print(f"\n✗ Failed to analyze {politician}: {e}")
-            import traceback
-            traceback.print_exc()
-
-    # Summary
-    print("\n" + "=" * 80)
-    print("ANALYSIS COMPLETE")
-    print("=" * 80)
-
-    print(f"\nAnalyzed {len(all_results)} politicians")
-    print("\nKey Findings:")
-
-    for politician, results in all_results.items():
-        print(f"\n{politician}:")
-
-        if 'fourier' in results:
-            cycles = results['fourier']['dominant_cycles']
-            if cycles:
-                top_cycle = cycles[0]
-                print(f"  • Dominant cycle: {top_cycle['period_days']:.0f} days ({top_cycle['category']})")
-
-        if 'hmm' in results:
-            regime = results['hmm']['current_regime_name']
-            print(f"  • Current regime: {regime}")
-
-        if 'dtw' in results and results['dtw']['matches']:
-            pred = results['dtw']['prediction']
-            print(f"  • 30-day prediction: {pred['predicted_return']:+.1f} trades (confidence: {pred['confidence']:.0%})")
-
-    print(f"\n✓ All experiments tracked to MLFlow")
-    print("  View at: http://localhost:5000")
-    print("\n" + "=" * 80)
+            engine.dispose()
+        except Exception:
+            pass  # Ignore errors during cleanup
 
 
 if __name__ == "__main__":

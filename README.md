@@ -1,6 +1,6 @@
-# Stock Analysis Research Framework
+# 🏛️ Politician Trading Analysis System
 
-A comprehensive Python framework for analyzing stock trading patterns, detecting cycles, identifying recurring models, and generating actionable insights from time-series data.
+A comprehensive full-stack application for analyzing and monitoring politician stock trades with real-time data pipeline, ML-powered analytics, and interactive dashboard.
 
 ## Overview
 
@@ -377,6 +377,26 @@ This framework is designed for:
 - **Correlation Studies**: Analyze relationships across multiple entities
 - **Predictive Modeling**: Forecast future behavior based on historical patterns
 - **Risk Assessment**: Identify risk factors and volatility patterns
+
+## Best Practices
+
+### Code Quality
+- **Type Hints**: All functions use type hints for better IDE support and error detection
+- **Validation**: Comprehensive input validation prevents errors and provides clear feedback
+- **Error Handling**: Robust try-except blocks with fallback strategies
+- **Logging**: Detailed logging at appropriate levels (debug, info, warning, error)
+- **Documentation**: Docstrings follow Google/NumPy style conventions
+
+### Performance
+- **Connection Pooling**: Database scripts use SQLAlchemy connection pooling
+- **Caching**: Intelligent caching with joblib for expensive computations
+- **Vectorization**: NumPy/Pandas operations preferred over loops
+- **Resource Management**: Proper cleanup with try-finally blocks
+
+### Security
+- **Environment Variables**: Sensitive credentials never hardcoded
+- **Input Sanitization**: All user inputs validated and sanitized
+- **SQL Injection Protection**: Parameterized queries only
 
 ## Limitations & Considerations
 

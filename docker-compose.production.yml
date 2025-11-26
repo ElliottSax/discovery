@@ -1,0 +1,259 @@
+version: '3.8'
+
+# ==================================
+# Production Docker Compose
+# Full stack with all services
+# ==================================
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: politician_trading_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-quant_db}
+      POSTGRES_USER: ${DB_USER:-quant_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quant_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: politician_trading_redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # MLFlow Tracking Server
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: politician_trading_mlflow
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${DB_USER:-quant_user}:${DB_PASSWORD}@postgres:5432/mlflow_db
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    volumes:
+      - mlflow_data:/mlflow/artifacts
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # Main Analysis Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+      args:
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}
+        - VCS_REF=${VCS_REF:-$(git rev-parse --short HEAD)}
+    container_name: politician_trading_app
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - cache_data:/app/cache
+      - logs_data:/app/logs
+      - data_volume:/app/data
+      - ./analysis:/app/analysis:ro
+      - ./scripts:/app/scripts:ro
+      - ./config:/app/config:ro
+    ports:
+      - "8000:8000"  # API port
+      - "9090:9090"  # Prometheus metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - analysis_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Celery Worker (for async tasks)
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: politician_trading_celery
+    command: celery -A tasks worker --loglevel=info --concurrency=4
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - cache_data:/app/cache
+      - logs_data:/app/logs
+      - data_volume:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - analysis_network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 3G
+
+  # Celery Beat (scheduler)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    container_name: politician_trading_beat
+    command: celery -A tasks beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - REDIS_HOST=redis
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      - logs_data:/app/logs
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # Nginx Reverse Proxy (optional but recommended)
+  nginx:
+    image: nginx:alpine
+    container_name: politician_trading_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - logs_data:/var/log/nginx
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: politician_trading_prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9091:9090"
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: politician_trading_grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - analysis_network
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  mlflow_data:
+    driver: local
+  cache_data:
+    driver: local
+  logs_data:
+    driver: local
+  data_volume:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Networks
+networks:
+  analysis_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

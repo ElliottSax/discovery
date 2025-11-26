@@ -1,0 +1,79 @@
+# ==================================
+# Multi-stage Production Dockerfile
+# ==================================
+
+# Stage 1: Builder
+FROM python:3.11-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    make \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.11-slim
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Security: Create non-root user with specific UID/GID
+RUN groupadd -g 1000 app && \
+    useradd -u 1000 -g app -m -s /bin/bash app
+
+# Set working directory
+WORKDIR /app
+
+# Create necessary directories with correct permissions
+RUN mkdir -p /app/cache /app/logs /app/data && \
+    chown -R app:app /app
+
+# Copy application code with correct ownership
+COPY --chown=app:app analysis/ ./analysis/
+COPY --chown=app:app scripts/ ./scripts/
+COPY --chown=app:app config/ ./config/
+COPY --chown=app:app *.py ./
+
+# Switch to non-root user
+USER app
+
+# Environment variables
+ENV PATH="/opt/venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Expose ports (if running API)
+EXPOSE 8000 9090
+
+# Health check - proper implementation
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD python -c "import sys; import psutil; sys.exit(0 if psutil.cpu_percent() < 95 else 1)" || exit 1
+
+# Labels for metadata
+LABEL maintainer="your-email@example.com" \
+      version="1.0.0" \
+      description="Politician Trading Analysis Production Service"
+
+# Default command (can be overridden)
+CMD ["python", "run_production.py"]

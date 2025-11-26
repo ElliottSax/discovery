@@ -24,6 +24,14 @@ from scipy.cluster import hierarchy
 import networkx as nx
 import logging
 
+# Import validation utilities if available
+try:
+    from analysis.utils.validation import validate_time_series, ValidationError
+    HAS_VALIDATION = True
+except ImportError:
+    HAS_VALIDATION = False
+    logging.debug("Validation utilities not available, using basic validation")
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,7 +77,71 @@ class CorrelationAnalyzer:
         Args:
             significance_threshold: P-value threshold for significance (default: 0.05)
         """
+        if not 0 < significance_threshold < 1:
+            raise ValueError(f"significance_threshold must be between 0 and 1, got {significance_threshold}")
         self.significance_threshold = significance_threshold
+
+    def validate_series(self, series: pd.Series, name: str = "series") -> Tuple[bool, str]:
+        """
+        Validate a time series for correlation analysis.
+
+        Uses comprehensive validation module if available, otherwise falls back to basic checks.
+
+        Args:
+            series: Time series to validate
+            name: Name for error messages
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Use comprehensive validation if available
+        if HAS_VALIDATION:
+            try:
+                return validate_time_series(
+                    series,
+                    name=name,
+                    min_length=30,
+                    require_datetime_index=False,  # We'll convert if needed
+                    check_variance=True,
+                    allow_nan=True,
+                    nan_threshold=0.5
+                )
+            except Exception as e:
+                logger.warning(f"Validation module failed, using basic validation: {e}")
+                # Fall through to basic validation
+
+        # Basic validation (fallback)
+        if series is None:
+            return False, f"{name} is None"
+
+        if not isinstance(series, pd.Series):
+            return False, f"{name} must be a pandas Series, got {type(series)}"
+
+        if series.empty:
+            return False, f"{name} is empty"
+
+        if len(series) < 30:
+            return False, f"{name} must have at least 30 data points, got {len(series)}"
+
+        # Check for all NaN or infinite values
+        if series.isna().all():
+            return False, f"{name} contains only NaN values"
+
+        try:
+            if np.isinf(series.dropna()).any():
+                return False, f"{name} contains infinite values"
+        except (TypeError, ValueError):
+            pass  # Skip for non-numeric data
+
+        # Check variance
+        try:
+            variance = series.dropna().var()
+            if pd.notna(variance) and variance < 1e-10:
+                return False, f"{name} has near-zero variance (constant values)"
+        except (TypeError, ValueError):
+            pass  # Skip for non-numeric data
+
+        return True, ""
 
     def analyze_cycle_correlation(
         self,
@@ -114,15 +186,49 @@ class CorrelationAnalyzer:
     ) -> Optional[CorrelationResult]:
         """Calculate correlation between two time series with lag optimization"""
 
+        # Validate inputs using validation method
+        valid1, error1 = self.validate_series(series1, f"series for {id1}")
+        if not valid1:
+            logger.warning(f"Invalid series for {id1}: {error1}")
+            return None
+
+        valid2, error2 = self.validate_series(series2, f"series for {id2}")
+        if not valid2:
+            logger.warning(f"Invalid series for {id2}: {error2}")
+            return None
+
+        # Ensure both series have datetime index
+        try:
+            if not isinstance(series1.index, pd.DatetimeIndex):
+                series1 = series1.copy()
+                series1.index = pd.to_datetime(series1.index)
+
+            if not isinstance(series2.index, pd.DatetimeIndex):
+                series2 = series2.copy()
+                series2.index = pd.to_datetime(series2.index)
+        except Exception as e:
+            logger.error(f"Failed to convert indices to datetime for {id1} and {id2}: {e}")
+            return None
+
         # Align series to common date range
-        common_index = series1.index.intersection(series2.index)
+        try:
+            common_index = series1.index.intersection(series2.index)
+        except Exception as e:
+            logger.error(f"Failed to find common index for {id1} and {id2}: {e}")
+            return None
 
         if len(common_index) < 30:
             # Not enough overlap
+            logger.debug(f"Insufficient overlap ({len(common_index)} days) between {id1} and {id2}")
             return None
 
-        s1_aligned = series1.reindex(common_index, fill_value=0)
-        s2_aligned = series2.reindex(common_index, fill_value=0)
+        # Safely reindex with validation
+        try:
+            s1_aligned = series1.reindex(common_index, fill_value=0)
+            s2_aligned = series2.reindex(common_index, fill_value=0)
+        except Exception as e:
+            logger.error(f"Failed to align series for {id1} and {id2}: {e}")
+            return None
 
         # Try different lags to find optimal correlation
         best_corr = 0
@@ -327,13 +433,22 @@ class CorrelationAnalyzer:
         return G
 
     def calculate_network_metrics(self, G: nx.Graph) -> NetworkMetrics:
-        """Calculate network analysis metrics"""
+        """
+        Calculate network analysis metrics.
 
+        Args:
+            G: NetworkX graph to analyze
+
+        Returns:
+            NetworkMetrics with density, clustering, path length, and centrality
+        """
+        # Handle empty graph
         if len(G.nodes()) == 0:
+            logger.warning("Empty graph provided to calculate_network_metrics")
             return NetworkMetrics(
-                density=0,
-                clustering_coefficient=0,
-                average_path_length=0,
+                density=0.0,
+                clustering_coefficient=0.0,
+                average_path_length=0.0,
                 central_politicians=[]
             )
 
@@ -341,27 +456,56 @@ class CorrelationAnalyzer:
         density = nx.density(G)
 
         # Clustering coefficient: tendency to form tight groups
-        clustering_coef = nx.average_clustering(G) if len(G.nodes()) > 0 else 0
+        try:
+            clustering_coef = nx.average_clustering(G) if len(G.nodes()) > 0 else 0.0
+        except Exception as e:
+            logger.warning(f"Failed to calculate clustering coefficient: {e}")
+            clustering_coef = 0.0
 
         # Average path length (if connected)
-        if nx.is_connected(G):
-            avg_path_length = nx.average_shortest_path_length(G)
-        else:
-            # For disconnected graphs, calculate per component
-            lengths = []
-            for component in nx.connected_components(G):
-                subgraph = G.subgraph(component)
-                if len(subgraph) > 1:
-                    lengths.append(nx.average_shortest_path_length(subgraph))
-            avg_path_length = np.mean(lengths) if lengths else 0
+        try:
+            if nx.is_connected(G):
+                avg_path_length = nx.average_shortest_path_length(G)
+            else:
+                # For disconnected graphs, calculate per component
+                lengths = []
+                for component in nx.connected_components(G):
+                    subgraph = G.subgraph(component)
+                    if len(subgraph) > 1:
+                        try:
+                            lengths.append(nx.average_shortest_path_length(subgraph))
+                        except Exception as e:
+                            logger.debug(f"Failed to calculate path length for component: {e}")
+                            continue
+                avg_path_length = np.mean(lengths) if lengths else 0.0
+        except Exception as e:
+            logger.warning(f"Failed to calculate average path length: {e}")
+            avg_path_length = 0.0
 
         # Centrality: most influential politicians
-        centrality = nx.eigenvector_centrality(G, max_iter=1000, weight='weight')
-        central_politicians = sorted(
-            centrality.items(),
-            key=lambda x: x[1],
-            reverse=True
-        )[:5]  # Top 5
+        try:
+            centrality = nx.eigenvector_centrality(G, max_iter=1000, weight='weight')
+            central_politicians = sorted(
+                centrality.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:5]  # Top 5
+        except nx.PowerIterationFailedConvergence:
+            # Fall back to degree centrality if eigenvector fails to converge
+            logger.warning("Eigenvector centrality failed to converge, using degree centrality")
+            try:
+                centrality = nx.degree_centrality(G)
+                central_politicians = sorted(
+                    centrality.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:5]
+            except Exception as e:
+                logger.error(f"Failed to calculate any centrality measure: {e}")
+                central_politicians = []
+        except Exception as e:
+            logger.error(f"Failed to calculate centrality: {e}")
+            central_politicians = []
 
         return NetworkMetrics(
             density=float(density),

@@ -10,15 +10,21 @@ import psycopg2
 import numpy as np
 from datetime import datetime, timedelta
 import json
+import os
+from psycopg2 import sql
 
-# Database connection
+# Database connection with environment variables for security
 DB_PARAMS = {
-    'host': 'localhost',
-    'port': 5432,
-    'database': 'quant_db',
-    'user': 'postgres',
-    'password': 'postgres'
+    'host': os.getenv('DB_HOST', 'localhost'),
+    'port': int(os.getenv('DB_PORT', 5432)),
+    'database': os.getenv('DB_NAME', 'quant_db'),
+    'user': os.getenv('DB_USER', 'postgres'),
+    'password': os.getenv('DB_PASSWORD', '')  # Must be set via environment variable
 }
+
+# Validate database password is set
+if not DB_PARAMS['password']:
+    raise ValueError("Database password must be set via DB_PASSWORD environment variable")
 
 
 def simple_fft_analysis(trade_dates):
@@ -82,115 +88,116 @@ def analyze_politician(conn, politician_name):
 
     cursor = conn.cursor()
 
-    # Load trades
-    cursor.execute("""
-        SELECT
-            transaction_date,
-            ticker,
-            transaction_type,
-            (amount_min + amount_max) / 2 AS amount
-        FROM trades t
-        JOIN politicians p ON t.politician_id = p.id
-        WHERE p.name = %s
-        ORDER BY transaction_date
-    """, (politician_name,))
-
-    trades = cursor.fetchall()
-
-    if not trades:
-        print(f"No trades found for {politician_name}")
-        return None
-
-    print(f"\nTrade Summary:")
-    print(f"  Total trades: {len(trades)}")
-    print(f"  Date range: {trades[0][0]} to {trades[-1][0]}")
-    print(f"  Duration: {(trades[-1][0] - trades[0][0]).days} days")
-
-    # Get ticker distribution
-    tickers = {}
-    for trade in trades:
-        ticker = trade[1]
-        tickers[ticker] = tickers.get(ticker, 0) + 1
-
-    top_tickers = sorted(tickers.items(), key=lambda x: x[1], reverse=True)[:3]
-    print(f"  Top tickers: {', '.join([f'{t[0]}({t[1]})' for t in top_tickers])}")
-
-    # Fourier Analysis
-    print(f"\n{'-'*80}")
-    print("FOURIER CYCLE DETECTION")
-    print('-'*80)
-
     try:
-        trade_dates = [trade[0] for trade in trades]
-        cycles = simple_fft_analysis(trade_dates)
+        # Load trades
+        cursor.execute("""
+            SELECT
+                transaction_date,
+                ticker,
+                transaction_type,
+                (amount_min + amount_max) / 2 AS amount
+            FROM trades t
+            JOIN politicians p ON t.politician_id = p.id
+            WHERE p.name = %s
+            ORDER BY transaction_date
+        """, (politician_name,))
 
-        if cycles:
-            print(f"\nDetected {len(cycles)} dominant cycles:")
-            for i, cycle in enumerate(cycles, 1):
-                period = cycle['period_days']
-                strength = cycle['strength']
+        trades = cursor.fetchall()
 
-                # Categorize
-                if 5 <= period <= 9:
-                    category = "Weekly"
-                elif 18 <= period <= 31:
-                    category = "Monthly"
-                elif 55 <= period <= 70:
-                    category = "Quarterly"
-                else:
-                    category = "Other"
+        if not trades:
+            print(f"No trades found for {politician_name}")
+            return None
 
-                print(f"  {i}. {category:12} - {period:6.1f} days (strength: {strength:.3f})")
-        else:
-            print("  No significant cycles detected")
+        print(f"\nTrade Summary:")
+        print(f"  Total trades: {len(trades)}")
+        print(f"  Date range: {trades[0][0]} to {trades[-1][0]}")
+        print(f"  Duration: {(trades[-1][0] - trades[0][0]).days} days")
 
-    except Exception as e:
-        print(f"  Error in Fourier analysis: {e}")
+        # Get ticker distribution
+        tickers = {}
+        for trade in trades:
+            ticker = trade[1]
+            tickers[ticker] = tickers.get(ticker, 0) + 1
 
-    # Trade Pattern Analysis
-    print(f"\n{'-'*80}")
-    print("TRADE PATTERN ANALYSIS")
-    print('-'*80)
+        top_tickers = sorted(tickers.items(), key=lambda x: x[1], reverse=True)[:3]
+        print(f"  Top tickers: {', '.join([f'{t[0]}({t[1]})' for t in top_tickers])}")
 
-    # Calculate trade bursts
-    trade_dates_list = [trade[0] for trade in trades]
-    bursts = []
-    current_burst = [trade_dates_list[0]]
+        # Fourier Analysis
+        print(f"\n{'-'*80}")
+        print("FOURIER CYCLE DETECTION")
+        print('-'*80)
 
-    for i in range(1, len(trade_dates_list)):
-        if (trade_dates_list[i] - trade_dates_list[i-1]).days <= 7:
-            current_burst.append(trade_dates_list[i])
-        else:
-            if len(current_burst) >= 3:
-                bursts.append(current_burst)
-            current_burst = [trade_dates_list[i]]
+        try:
+            trade_dates = [trade[0] for trade in trades]
+            cycles = simple_fft_analysis(trade_dates)
 
-    if len(current_burst) >= 3:
-        bursts.append(current_burst)
+            if cycles:
+                print(f"\nDetected {len(cycles)} dominant cycles:")
+                for i, cycle in enumerate(cycles, 1):
+                    period = cycle['period_days']
+                    strength = cycle['strength']
 
-    print(f"\nTrading Bursts Detected:")
-    print(f"  Total bursts: {len(bursts)} (3+ trades within 7 days)")
-    if bursts:
-        avg_burst_size = sum(len(b) for b in bursts) / len(bursts)
-        print(f"  Average burst size: {avg_burst_size:.1f} trades")
-        print(f"  Largest burst: {max(len(b) for b in bursts)} trades")
+                    # Categorize
+                    if 5 <= period <= 9:
+                        category = "Weekly"
+                    elif 18 <= period <= 31:
+                        category = "Monthly"
+                    elif 55 <= period <= 70:
+                        category = "Quarterly"
+                    else:
+                        category = "Other"
 
-    # Buy/Sell ratio
-    buys = sum(1 for t in trades if t[2] == 'buy')
-    sells = len(trades) - buys
-    print(f"\nTrade Type Distribution:")
-    print(f"  Buys: {buys} ({buys/len(trades)*100:.1f}%)")
-    print(f"  Sells: {sells} ({sells/len(trades)*100:.1f}%)")
+                    print(f"  {i}. {category:12} - {period:6.1f} days (strength: {strength:.3f})")
+            else:
+                print("  No significant cycles detected")
 
-    cursor.close()
+        except Exception as e:
+            print(f"  Error in Fourier analysis: {e}")
 
-    return {
-        'name': politician_name,
-        'total_trades': len(trades),
-        'cycles': cycles,
-        'bursts': len(bursts),
-        'buy_ratio': buys / len(trades)
-    }
+        # Trade Pattern Analysis
+        print(f"\n{'-'*80}")
+        print("TRADE PATTERN ANALYSIS")
+        print('-'*80)
+
+        # Calculate trade bursts
+        trade_dates_list = [trade[0] for trade in trades]
+        bursts = []
+        current_burst = [trade_dates_list[0]]
+
+        for i in range(1, len(trade_dates_list)):
+            if (trade_dates_list[i] - trade_dates_list[i-1]).days <= 7:
+                current_burst.append(trade_dates_list[i])
+            else:
+                if len(current_burst) >= 3:
+                    bursts.append(current_burst)
+                current_burst = [trade_dates_list[i]]
+
+        if len(current_burst) >= 3:
+            bursts.append(current_burst)
+
+        print(f"\nTrading Bursts Detected:")
+        print(f"  Total bursts: {len(bursts)} (3+ trades within 7 days)")
+        if bursts:
+            avg_burst_size = sum(len(b) for b in bursts) / len(bursts)
+            print(f"  Average burst size: {avg_burst_size:.1f} trades")
+            print(f"  Largest burst: {max(len(b) for b in bursts)} trades")
+
+        # Buy/Sell ratio
+        buys = sum(1 for t in trades if t[2] == 'buy')
+        sells = len(trades) - buys
+        print(f"\nTrade Type Distribution:")
+        print(f"  Buys: {buys} ({buys/len(trades)*100:.1f}%)")
+        print(f"  Sells: {sells} ({sells/len(trades)*100:.1f}%)")
+
+        return {
+            'name': politician_name,
+            'total_trades': len(trades),
+            'cycles': cycles,
+            'bursts': len(bursts),
+            'buy_ratio': buys / len(trades)
+        }
+    finally:
+        cursor.close()
 
 
 def main():
@@ -201,6 +208,7 @@ def main():
     print("Cyclical Detection Models: Fourier + Pattern Analysis")
     print("="*80)
 
+    conn = None
     try:
         # Connect to database
         conn = psycopg2.connect(**DB_PARAMS)
@@ -208,9 +216,11 @@ def main():
 
         # Get politicians
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT name FROM politicians ORDER BY name")
-        politicians = [row[0] for row in cursor.fetchall()]
-        cursor.close()
+        try:
+            cursor.execute("SELECT DISTINCT name FROM politicians ORDER BY name")
+            politicians = [row[0] for row in cursor.fetchall()]
+        finally:
+            cursor.close()
 
         print(f"✓ Found {len(politicians)} politicians\n")
 
@@ -244,12 +254,17 @@ def main():
         print("✓ ANALYSIS COMPLETE")
         print('='*80)
 
-        conn.close()
-
     except Exception as e:
         print(f"\n✗ Fatal error: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        # Ensure connection is closed
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass  # Already failed, ignore close errors
 
 
 if __name__ == "__main__":

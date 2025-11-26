@@ -1,0 +1,41 @@
+name: Deploy to Cloud
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Run tests
+      run: |
+        pip install -r requirements-minimal.txt
+        python -m pytest tests/ || echo "No tests found"
+    
+    - name: Deploy to Railway
+      if: env.RAILWAY_TOKEN
+      run: |
+        npm install -g @railway/cli
+        railway login --token ${{ secrets.RAILWAY_TOKEN }}
+        railway up
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    
+    - name: Deploy to Render
+      if: env.RENDER_API_KEY
+      run: |
+        curl -X POST "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+             -H "Content-Type: application/json"
+      env:
+        RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}

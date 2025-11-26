@@ -21,7 +21,14 @@ import hashlib
 import pickle
 import time
 from joblib import Memory
-from config.ml_config import ml_settings
+
+# Gracefully handle missing config module
+try:
+    from config.ml_config import ml_settings
+except ImportError:
+    # Fallback to None if config not available
+    ml_settings = None
+    logging.warning("config.ml_config not available, using default settings")
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +42,15 @@ class CacheManager:
     - Automatic invalidation based on TTL
     - Cache statistics tracking
     - Memory limits
+    - Automatic cleanup of old entries
     """
 
     def __init__(
         self,
         cache_dir: str = "./cache",
         verbose: int = 0,
-        compress: bool = True
+        compress: bool = True,
+        max_size_mb: float = 500.0
     ):
         """
         Initialize cache manager.
@@ -50,25 +59,32 @@ class CacheManager:
             cache_dir: Directory for cache storage
             verbose: Verbosity level (0=silent, 1=info, 2=debug)
             compress: Whether to compress cached values
+            max_size_mb: Maximum cache size in megabytes
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.max_size_mb = max_size_mb
 
         # Initialize joblib Memory for disk caching
         self.memory = Memory(
             location=str(self.cache_dir),
             verbose=verbose,
-            compress=compress
+            compress=compress,
+            bytes_limit=int(max_size_mb * 1024 * 1024)  # Auto cleanup when size exceeded
         )
 
         # Cache statistics
+        # Note: hits/misses tracking removed due to unreliability with joblib
         self.stats = {
-            'hits': 0,
-            'misses': 0,
-            'cache_time_saved': 0.0
+            'cache_dir': str(self.cache_dir),
+            'max_size_mb': max_size_mb
         }
 
-        logger.info(f"Initialized CacheManager at {self.cache_dir}")
+        # Schedule periodic cleanup
+        self._last_cleanup_time = time.time()
+        self._cleanup_interval = 3600  # Cleanup every hour
+        
+        logger.info(f"Initialized CacheManager at {self.cache_dir} with max size {max_size_mb}MB")
 
     def cache(
         self,
@@ -95,22 +111,18 @@ class CacheManager:
 
             @wraps(func)
             def wrapper(*args, **kwargs):
-                start_time = time.time()
+                # Periodic cleanup check
+                current_time = time.time()
+                if current_time - self._last_cleanup_time > self._cleanup_interval:
+                    self._auto_cleanup()
+                    self._last_cleanup_time = current_time
 
                 try:
-                    # Try to get from cache
+                    # Use joblib's cached function
+                    # Note: Cache hit/miss tracking removed due to unreliability
+                    # Joblib doesn't provide a clean API to detect cache hits
                     result = cached_func(*args, **kwargs)
-
-                    # Check if it was a cache hit
-                    elapsed = time.time() - start_time
-
-                    if elapsed < 0.01:  # Likely a cache hit (< 10ms)
-                        self.stats['hits'] += 1
-                        logger.debug(f"Cache HIT for {func.__name__}")
-                    else:
-                        self.stats['misses'] += 1
-                        logger.debug(f"Cache MISS for {func.__name__} ({elapsed:.3f}s)")
-
+                    logger.debug(f"Cached function call: {func.__name__}")
                     return result
 
                 except Exception as e:
@@ -125,23 +137,30 @@ class CacheManager:
     def clear(self):
         """Clear all cached data."""
         self.memory.clear()
-        self.stats = {
-            'hits': 0,
-            'misses': 0,
-            'cache_time_saved': 0.0
-        }
         logger.info("Cache cleared")
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
-        total = self.stats['hits'] + self.stats['misses']
-        hit_rate = self.stats['hits'] / total if total > 0 else 0
+        """
+        Get cache statistics.
 
-        return {
-            **self.stats,
-            'total_calls': total,
-            'hit_rate': hit_rate
-        }
+        Returns:
+            Dictionary with cache directory info and size metrics
+        """
+        try:
+            # Calculate current cache size
+            total_size = sum(
+                f.stat().st_size for f in self.cache_dir.rglob('*') if f.is_file()
+            )
+            size_mb = total_size / (1024 * 1024)
+
+            return {
+                **self.stats,
+                'current_size_mb': round(size_mb, 2),
+                'utilization': round(size_mb / self.max_size_mb * 100, 1)
+            }
+        except Exception as e:
+            logger.warning(f"Failed to calculate cache stats: {e}")
+            return self.stats
 
     def reduce_size(self, target_size_mb: float = 100):
         """
@@ -155,6 +174,23 @@ class CacheManager:
             logger.info(f"Reduced cache size to ~{target_size_mb}MB")
         except Exception as e:
             logger.warning(f"Failed to reduce cache size: {e}")
+    
+    def _auto_cleanup(self):
+        """Automatic cleanup to prevent unbounded growth."""
+        try:
+            # Get cache directory size
+            total_size = sum(
+                f.stat().st_size for f in self.cache_dir.rglob('*') if f.is_file()
+            )
+            size_mb = total_size / (1024 * 1024)
+            
+            # Cleanup if exceeded 80% of max size
+            if size_mb > self.max_size_mb * 0.8:
+                target = self.max_size_mb * 0.6  # Reduce to 60% when cleaning
+                self.reduce_size(target)
+                logger.info(f"Auto-cleanup triggered: {size_mb:.1f}MB -> {target:.1f}MB")
+        except Exception as e:
+            logger.debug(f"Auto-cleanup check failed: {e}")
 
 
 # Global cache manager instance

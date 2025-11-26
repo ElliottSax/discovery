@@ -1,0 +1,62 @@
+AUTONOMOUS TRADING ANALYSIS SUMMARY
+============================================================
+
+Generated: 2025-11-19 18:58:33
+Total Trades Analyzed: 134
+Politicians: 10
+
+KEY FINDINGS:
+----------------------------------------
+
+Dataset Overview:
+  Analyzed 134 trades across 10 politicians
+  Covering 25 unique stocks over 180 days
+
+Trading Activity:
+  Chuck Schumer is the most active trader
+  Completed 33 trades (24.6% of all trades)
+
+Stock Preferences:
+  Top traded stocks: HD, JPM, DIS
+  HD leads with 12 trades
+
+Political Analysis:
+  Democrats: 67 trades, Republicans: 67 trades
+  Ratio: 1.00:1
+
+Market Sentiment:
+  Buy/Sell ratio: 2.44 (Bullish)
+  95 buys vs 39 sells
+
+Trading Frequency:
+  Average 0.74 trades per day
+  Peak activity detected in recent months
+
+
+TRADING CYCLES:
+----------------------------------------
+
+Chuck Schumer:
+  Trades: 33
+  Cycle: High Frequency (Weekly)
+  Favorite Stock: LMT
+
+Ron DeSantis:
+  Trades: 12
+  Cycle: Regular (Monthly)
+  Favorite Stock: XOM
+
+Nancy Pelosi:
+  Trades: 19
+  Cycle: Regular (Monthly)
+  Favorite Stock: PFE
+
+Elizabeth Warren:
+  Trades: 10
+  Cycle: Regular (Monthly)
+  Favorite Stock: NVDA
+
+John Hickenlooper:
+  Trades: 5
+  Cycle: Moderate (Quarterly)
+  Favorite Stock: JPM

@@ -5,7 +5,19 @@ from mlflow.tracking import MlflowClient
 from typing import Dict, Any, Optional
 import logging
 from datetime import datetime
-from config.ml_config import ml_settings
+
+# Gracefully handle missing config module
+try:
+    from config.ml_config import ml_settings
+except ImportError:
+    # Create a minimal settings object with defaults
+    class DefaultMLSettings:
+        MLFLOW_TRACKING_URI = "http://localhost:5000"
+        MLFLOW_EXPERIMENT_NAME = "politician-trade-prediction"
+        MLFLOW_ARTIFACT_LOCATION = None
+
+    ml_settings = DefaultMLSettings()
+    logging.warning("config.ml_config not available, using default MLFlow settings")
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +46,31 @@ class MLFlowTracker:
         # Set tracking URI
         mlflow.set_tracking_uri(ml_settings.MLFLOW_TRACKING_URI)
 
-        # Create or get experiment
+        # Create or get experiment with thread safety
+        import threading
+        self._experiment_lock = threading.Lock()
+        
         try:
-            self.experiment = mlflow.get_experiment_by_name(self.experiment_name)
-            if self.experiment is None:
-                self.experiment_id = mlflow.create_experiment(
-                    self.experiment_name,
-                    artifact_location=ml_settings.MLFLOW_ARTIFACT_LOCATION
-                )
-            else:
-                self.experiment_id = self.experiment.experiment_id
+            with self._experiment_lock:
+                # Check if experiment exists
+                self.experiment = mlflow.get_experiment_by_name(self.experiment_name)
+                
+                if self.experiment is None:
+                    # Try to create the experiment
+                    try:
+                        self.experiment_id = mlflow.create_experiment(
+                            self.experiment_name,
+                            artifact_location=ml_settings.MLFLOW_ARTIFACT_LOCATION
+                        )
+                    except mlflow.exceptions.MlflowException as e:
+                        # Another thread/process may have created it
+                        if "already exists" in str(e).lower():
+                            self.experiment = mlflow.get_experiment_by_name(self.experiment_name)
+                            self.experiment_id = self.experiment.experiment_id if self.experiment else None
+                        else:
+                            raise
+                else:
+                    self.experiment_id = self.experiment.experiment_id
 
             mlflow.set_experiment(self.experiment_name)
             logger.info(f"MLFlow experiment set: {self.experiment_name}")

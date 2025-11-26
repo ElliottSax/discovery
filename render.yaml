@@ -1,0 +1,17 @@
+services:
+  - type: background_worker
+    name: trading-monitor
+    runtime: python3
+    buildCommand: pip install -r requirements-minimal.txt
+    startCommand: python continuous_monitor.py
+    plan: starter
+    healthCheckPath: /health
+    autoscaling:
+      enabled: false
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: CHECK_INTERVAL_MINUTES
+        value: "30"
+      - key: MONTHLY_BUDGET
+        value: "10.0"

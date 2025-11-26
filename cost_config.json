@@ -1,0 +1,25 @@
+{
+  "budget_limits": {
+    "daily_max_usd": 0.50,
+    "monthly_max_usd": 15.0,
+    "emergency_shutdown_usd": 20.0
+  },
+  "api_rate_limits": {
+    "quiver_calls_per_hour": 50,
+    "capitol_trades_calls_per_hour": 100,
+    "free_source_calls_per_hour": 30
+  },
+  "optimization": {
+    "check_interval_minutes": 30,
+    "off_peak_interval_minutes": 60,
+    "weekend_interval_minutes": 120,
+    "enable_smart_scheduling": true,
+    "cache_duration_hours": 24
+  },
+  "alerts": {
+    "budget_warning_percentage": 80,
+    "high_priority_only_mode": false,
+    "quiet_hours_start": 22,
+    "quiet_hours_end": 6
+  }
+}

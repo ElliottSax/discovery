@@ -1,0 +1,305 @@
+{
+  "metadata": {
+    "generated": "2025-11-19T18:58:33.611684",
+    "total_trades": 134,
+    "politicians_analyzed": 10,
+    "analysis_type": "autonomous_trading_analysis"
+  },
+  "results": {
+    "trading_cycles": {
+      "Chuck Schumer": {
+        "total_trades": 33,
+        "avg_days_between_trades": 5.4,
+        "cycle_type": "High Frequency (Weekly)",
+        "most_traded_stock": "LMT",
+        "most_traded_count": 5,
+        "date_range": "2025-05-30 to 2025-11-19"
+      },
+      "Ron DeSantis": {
+        "total_trades": 12,
+        "avg_days_between_trades": 14.7,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "XOM",
+        "most_traded_count": 2,
+        "date_range": "2025-06-05 to 2025-11-14"
+      },
+      "Nancy Pelosi": {
+        "total_trades": 19,
+        "avg_days_between_trades": 8.7,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "PFE",
+        "most_traded_count": 3,
+        "date_range": "2025-06-14 to 2025-11-18"
+      },
+      "Elizabeth Warren": {
+        "total_trades": 10,
+        "avg_days_between_trades": 13.1,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "NVDA",
+        "most_traded_count": 3,
+        "date_range": "2025-06-03 to 2025-09-29"
+      },
+      "John Hickenlooper": {
+        "total_trades": 5,
+        "avg_days_between_trades": 30.5,
+        "cycle_type": "Moderate (Quarterly)",
+        "most_traded_stock": "JPM",
+        "most_traded_count": 2,
+        "date_range": "2025-06-17 to 2025-10-17"
+      },
+      "Kevin McCarthy": {
+        "total_trades": 19,
+        "avg_days_between_trades": 9.9,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "JPM",
+        "most_traded_count": 4,
+        "date_range": "2025-05-25 to 2025-11-19"
+      },
+      "Mitch McConnell": {
+        "total_trades": 21,
+        "avg_days_between_trades": 8.9,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "CRM",
+        "most_traded_count": 3,
+        "date_range": "2025-05-23 to 2025-11-18"
+      },
+      "Susan Collins": {
+        "total_trades": 8,
+        "avg_days_between_trades": 21.1,
+        "cycle_type": "Regular (Monthly)",
+        "most_traded_stock": "PFE",
+        "most_traded_count": 2,
+        "date_range": "2025-06-06 to 2025-11-01"
+      }
+    },
+    "patterns": {
+      "burst_traders": [
+        {
+          "politician": "Chuck Schumer",
+          "burst_date": "2025-05-30",
+          "trades_in_week": 3,
+          "stocks": [
+            "HD",
+            "MA"
+          ]
+        },
+        {
+          "politician": "Ron DeSantis",
+          "burst_date": "2025-08-24",
+          "trades_in_week": 3,
+          "stocks": [
+            "XOM",
+            "MA",
+            "BA"
+          ]
+        },
+        {
+          "politician": "Nancy Pelosi",
+          "burst_date": "2025-09-09",
+          "trades_in_week": 3,
+          "stocks": [
+            "XOM",
+            "PFE",
+            "DIS"
+          ]
+        },
+        {
+          "politician": "Kevin McCarthy",
+          "burst_date": "2025-08-12",
+          "trades_in_week": 3,
+          "stocks": [
+            "TSLA",
+            "BA"
+          ]
+        },
+        {
+          "politician": "Mitch McConnell",
+          "burst_date": "2025-06-24",
+          "trades_in_week": 3,
+          "stocks": [
+            "AMD",
+            "CRM",
+            "PYPL"
+          ]
+        },
+        {
+          "politician": "Susan Collins",
+          "burst_date": "2025-10-28",
+          "trades_in_week": 3,
+          "stocks": [
+            "AMD",
+            "V"
+          ]
+        }
+      ],
+      "consistent_traders": [],
+      "stock_specialists": [
+        {
+          "politician": "Elizabeth Warren",
+          "specialized_stock": "NVDA",
+          "concentration": "30.0%",
+          "total_trades": 10
+        }
+      ],
+      "party_correlations": {
+        "shared_stocks": 19,
+        "democrat_only": 1,
+        "republican_only": 5,
+        "overlap_percentage": "76.0%"
+      }
+    },
+    "correlations": [
+      {
+        "politician1": "Ron DeSantis",
+        "politician2": "John Hickenlooper",
+        "similarity_score": "50.0%",
+        "shared_stocks": [
+          "CRM",
+          "HD",
+          "JPM",
+          "DIS"
+        ],
+        "total_shared": 4
+      },
+      {
+        "politician1": "Chuck Schumer",
+        "politician2": "Mitch McConnell",
+        "similarity_score": "45.0%",
+        "shared_stocks": [
+          "WMT",
+          "MA",
+          "MSFT",
+          "V",
+          "AMD"
+        ],
+        "total_shared": 9
+      },
+      {
+        "politician1": "Chuck Schumer",
+        "politician2": "Nancy Pelosi",
+        "similarity_score": "44.4%",
+        "shared_stocks": [
+          "WMT",
+          "DIS",
+          "XOM",
+          "MSFT",
+          "PFE"
+        ],
+        "total_shared": 8
+      },
+      {
+        "politician1": "Chuck Schumer",
+        "politician2": "Ron DeSantis",
+        "similarity_score": "33.3%",
+        "shared_stocks": [
+          "DIS",
+          "XOM",
+          "MA",
+          "JPM",
+          "HD"
+        ],
+        "total_shared": 6
+      },
+      {
+        "politician1": "Ron DeSantis",
+        "politician2": "Mitch McConnell",
+        "similarity_score": "31.2%",
+        "shared_stocks": [
+          "MA",
+          "BA",
+          "CRM",
+          "JPM",
+          "HD"
+        ],
+        "total_shared": 5
+      },
+      {
+        "politician1": "Nancy Pelosi",
+        "politician2": "Josh Hawley",
+        "similarity_score": "30.0%",
+        "shared_stocks": [
+          "XOM",
+          "LMT",
+          "V"
+        ],
+        "total_shared": 3
+      },
+      {
+        "politician1": "Ron DeSantis",
+        "politician2": "Kevin McCarthy",
+        "similarity_score": "28.6%",
+        "shared_stocks": [
+          "BA",
+          "HD",
+          "JPM",
+          "DIS"
+        ],
+        "total_shared": 4
+      },
+      {
+        "politician1": "John Hickenlooper",
+        "politician2": "Kevin McCarthy",
+        "similarity_score": "27.3%",
+        "shared_stocks": [
+          "HD",
+          "JPM",
+          "DIS"
+        ],
+        "total_shared": 3
+      },
+      {
+        "politician1": "Nancy Pelosi",
+        "politician2": "Susan Collins",
+        "similarity_score": "25.0%",
+        "shared_stocks": [
+          "NFLX",
+          "PFE",
+          "V"
+        ],
+        "total_shared": 3
+      },
+      {
+        "politician1": "Elizabeth Warren",
+        "politician2": "John Hickenlooper",
+        "similarity_score": "25.0%",
+        "shared_stocks": [
+          "CRM",
+          "DIS"
+        ],
+        "total_shared": 2
+      }
+    ],
+    "insights": [
+      {
+        "category": "Dataset Overview",
+        "finding": "Analyzed 134 trades across 10 politicians",
+        "details": "Covering 25 unique stocks over 180 days"
+      },
+      {
+        "category": "Trading Activity",
+        "finding": "Chuck Schumer is the most active trader",
+        "details": "Completed 33 trades (24.6% of all trades)"
+      },
+      {
+        "category": "Stock Preferences",
+        "finding": "Top traded stocks: HD, JPM, DIS",
+        "details": "HD leads with 12 trades"
+      },
+      {
+        "category": "Political Analysis",
+        "finding": "Democrats: 67 trades, Republicans: 67 trades",
+        "details": "Ratio: 1.00:1"
+      },
+      {
+        "category": "Market Sentiment",
+        "finding": "Buy/Sell ratio: 2.44 (Bullish)",
+        "details": "95 buys vs 39 sells"
+      },
+      {
+        "category": "Trading Frequency",
+        "finding": "Average 0.74 trades per day",
+        "details": "Peak activity detected in recent months"
+      }
+    ]
+  }
+}
