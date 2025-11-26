@@ -65,7 +65,7 @@ class Trade(Base):
     industry = Column(String(200))
 
     # Additional data
-    metadata = Column(JSON)
+    extra_data = Column(JSON)
 
     # Timestamps
     created_at = Column(DateTime, server_default=func.now())
@@ -191,7 +191,7 @@ class Alert(Base):
     resolved_at = Column(DateTime)
 
     # Data
-    metadata = Column(JSON)
+    extra_data = Column(JSON)
 
     # Timestamps
     created_at = Column(DateTime, server_default=func.now(), index=True)
