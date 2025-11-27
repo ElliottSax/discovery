@@ -1,0 +1,255 @@
+{
+  "timestamp": "2025-11-26T20:30:11.209198",
+  "politicians": [
+    {
+      "name": "Chuck Schumer",
+      "trade_count": 128,
+      "hmm_analysis": {
+        "current_regime": "High Activity",
+        "regime_stats": {
+          "Low Activity": {
+            "mean_trades_per_day": NaN,
+            "std": NaN,
+            "frequency": 0.0,
+            "total_days": 0
+          },
+          "High Activity": {
+            "mean_trades_per_day": 0.9992359007684255,
+            "std": 0.010406491109072642,
+            "frequency": 0.1792717086834734,
+            "total_days": 128
+          },
+          "Medium Activity": {
+            "mean_trades_per_day": 1.770204072830046e-05,
+            "std": 0.00974527017337201,
+            "frequency": 0.8207282913165266,
+            "total_days": 586
+          }
+        },
+        "transition_matrix": [
+          [
+            9.501425937783593e-12,
+            0.9997755832510855,
+            0.00022441673941313376
+          ],
+          [
+            4.588986756167802e-09,
+            0.19685038051685552,
+            0.8031496148941577
+          ],
+          [
+            4.96181172069425e-09,
+            0.1740614285732925,
+            0.8259385664648958
+          ]
+        ],
+        "regime_names": [
+          "Low Activity",
+          "High Activity",
+          "Medium Activity"
+        ],
+        "recent_changes": 3
+      }
+    },
+    {
+      "name": "Nancy Pelosi",
+      "trade_count": 118,
+      "hmm_analysis": {
+        "current_regime": "High Activity",
+        "regime_stats": {
+          "Low Activity": {
+            "mean_trades_per_day": NaN,
+            "std": NaN,
+            "frequency": 0.0,
+            "total_days": 0
+          },
+          "High Activity": {
+            "mean_trades_per_day": 1.000585934589181,
+            "std": 0.00969759921357052,
+            "frequency": 0.16666666666666666,
+            "total_days": 118
+          },
+          "Medium Activity": {
+            "mean_trades_per_day": 0.0002940048039514655,
+            "std": 0.010203386685264212,
+            "frequency": 0.8333333333333334,
+            "total_days": 590
+          }
+        },
+        "transition_matrix": [
+          [
+            2.3377831484014264e-16,
+            0.9994776586981068,
+            0.0005223413018929922
+          ],
+          [
+            3.4630897138837175e-11,
+            0.18803418801449273,
+            0.8119658119508764
+          ],
+          [
+            1.5919831228375766e-12,
+            0.16101694914672296,
+            0.8389830508516851
+          ]
+        ],
+        "regime_names": [
+          "Low Activity",
+          "High Activity",
+          "Medium Activity"
+        ],
+        "recent_changes": 13
+      }
+    },
+    {
+      "name": "Elizabeth Warren",
+      "trade_count": 113,
+      "hmm_analysis": {
+        "current_regime": "High Activity",
+        "regime_stats": {
+          "Low Activity": {
+            "mean_trades_per_day": NaN,
+            "std": NaN,
+            "frequency": 0.0,
+            "total_days": 0
+          },
+          "High Activity": {
+            "mean_trades_per_day": 1.0022473415463569,
+            "std": 0.010660645347116606,
+            "frequency": 0.15782122905027932,
+            "total_days": 113
+          },
+          "Medium Activity": {
+            "mean_trades_per_day": 0.0005105414242553553,
+            "std": 0.009833829513585324,
+            "frequency": 0.8421787709497207,
+            "total_days": 603
+          }
+        },
+        "transition_matrix": [
+          [
+            1.638374473650632e-11,
+            0.998408764718549,
+            0.0015912352650672861
+          ],
+          [
+            8.252077053308248e-10,
+            0.17857142184881533,
+            0.821428577325977
+          ],
+          [
+            2.6650484416580807e-09,
+            0.1525704784157798,
+            0.8474295189191718
+          ]
+        ],
+        "regime_names": [
+          "Low Activity",
+          "High Activity",
+          "Medium Activity"
+        ],
+        "recent_changes": 9
+      }
+    },
+    {
+      "name": "Mitch McConnell",
+      "trade_count": 104,
+      "hmm_analysis": {
+        "current_regime": "High Activity",
+        "regime_stats": {
+          "High Activity": {
+            "mean_trades_per_day": 1.0011013884207531,
+            "std": 0.009988590671012067,
+            "frequency": 0.14504881450488144,
+            "total_days": 104
+          },
+          "Medium Activity": {
+            "mean_trades_per_day": 0.0008404938242106949,
+            "std": 0.010702760931711049,
+            "frequency": 0.12691771269177127,
+            "total_days": 91
+          },
+          "Low Activity": {
+            "mean_trades_per_day": -0.00040457881495892066,
+            "std": 0.009897817097654367,
+            "frequency": 0.7280334728033473,
+            "total_days": 522
+          }
+        },
+        "transition_matrix": [
+          [
+            0.11650485436887253,
+            0.8314954157460515,
+            0.05199972988507594
+          ],
+          [
+            0.12026762535459887,
+            0.0006317223439492928,
+            0.879100652301452
+          ],
+          [
+            0.15308744760521545,
+            0.001735816684969732,
+            0.8451767357098148
+          ]
+        ],
+        "regime_names": [
+          "High Activity",
+          "Medium Activity",
+          "Low Activity"
+        ],
+        "recent_changes": 6
+      }
+    },
+    {
+      "name": "Ted Cruz",
+      "trade_count": 101,
+      "hmm_analysis": {
+        "current_regime": "High Activity",
+        "regime_stats": {
+          "Low Activity": {
+            "mean_trades_per_day": NaN,
+            "std": NaN,
+            "frequency": 0.0,
+            "total_days": 0
+          },
+          "High Activity": {
+            "mean_trades_per_day": 0.9995787102967838,
+            "std": 0.00906577441149372,
+            "frequency": 0.14165497896213183,
+            "total_days": 101
+          },
+          "Medium Activity": {
+            "mean_trades_per_day": 0.00024831619026765065,
+            "std": 0.010064523294283655,
+            "frequency": 0.8583450210378681,
+            "total_days": 612
+          }
+        },
+        "transition_matrix": [
+          [
+            1.1736224761717956e-17,
+            0.9999467080627213,
+            5.329193727858879e-05
+          ],
+          [
+            4.2747875982138395e-09,
+            0.14999999841225178,
+            0.8499999973129606
+          ],
+          [
+            3.1282245597157104e-12,
+            0.13888888840482583,
+            0.8611111115920459
+          ]
+        ],
+        "regime_names": [
+          "Low Activity",
+          "High Activity",
+          "Medium Activity"
+        ],
+        "recent_changes": 5
+      }
+    }
+  ]
+}
