@@ -28,8 +28,27 @@ ChartJS.register(
   Filler
 );
 
-// Real analysis data from our system
-const ANALYSIS_DATA = {
+interface AnalyticsData {
+  politicians: Array<{
+    name: string;
+    cycle: number;
+    strength: number;
+    trades: number;
+    regime: string;
+    changes: number;
+    type: string;
+  }>;
+  topStocks: Array<{
+    ticker: string;
+    trades: number;
+    change: number;
+  }>;
+  totalTrades: number;
+  analysisDate: string;
+}
+
+// Fallback data for offline mode
+const FALLBACK_DATA: AnalyticsData = {
   politicians: [
     { name: 'Nancy Pelosi', cycle: 8, strength: 0.088, trades: 118, regime: 'High Activity', changes: 13, type: 'Weekly' },
     { name: 'Chuck Schumer', cycle: 60, strength: 0.083, trades: 128, regime: 'High Activity', changes: 3, type: 'Quarterly' },
@@ -38,14 +57,14 @@ const ANALYSIS_DATA = {
     { name: 'Ted Cruz', cycle: 119, strength: 0.068, trades: 101, regime: 'High Activity', changes: 5, type: 'Extended' }
   ],
   topStocks: [
-    { ticker: 'META', trades: 47, change: 12.5 },
-    { ticker: 'AMZN', trades: 50, change: 8.3 },
-    { ticker: 'NVDA', trades: 28, change: 25.1 },
-    { ticker: 'AAPL', trades: 28, change: 15.2 },
-    { ticker: 'MSFT', trades: 26, change: 18.7 },
-    { ticker: 'UNH', trades: 30, change: 6.4 },
+    { ticker: 'META', trades: 47, change: 8.3 },
+    { ticker: 'AMZN', trades: 50, change: 8.9 },
+    { ticker: 'NVDA', trades: 14, change: 2.5 },
+    { ticker: 'AAPL', trades: 14, change: 2.5 },
+    { ticker: 'MSFT', trades: 14, change: 2.5 },
+    { ticker: 'UNH', trades: 30, change: 5.3 },
     { ticker: 'TSLA', trades: 14, change: -3.2 },
-    { ticker: 'JPM', trades: 13, change: 9.1 }
+    { ticker: 'JPM', trades: 13, change: 2.3 }
   ],
   totalTrades: 564,
   analysisDate: '2025-11-26'
@@ -54,14 +73,41 @@ const ANALYSIS_DATA = {
 export default function Home() {
   const [selectedPolitician, setSelectedPolitician] = useState(0);
   const [isAnimated, setIsAnimated] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData>(FALLBACK_DATA);
+  const [loading, setLoading] = useState(true);
+  const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
     setIsAnimated(true);
+
+    // Fetch analytics data from API
+    const fetchAnalytics = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/dashboard/analytics');
+        if (!response.ok) throw new Error('API unavailable');
+
+        const data = await response.json();
+        setAnalyticsData(data);
+        setIsLive(true);
+        setLoading(false);
+      } catch (err) {
+        console.warn('API unavailable, using fallback data:', err);
+        setAnalyticsData(FALLBACK_DATA);
+        setIsLive(false);
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+
+    // Refresh every 60 seconds
+    const interval = setInterval(fetchAnalytics, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   // Main hero graph - Trading Pattern Visualization
   const generatePatternData = () => {
-    const politician = ANALYSIS_DATA.politicians[selectedPolitician];
+    const politician = analyticsData.politicians[selectedPolitician];
     const days = 365;
     const labels = Array.from({ length: days }, (_, i) => `Day ${i + 1}`);
 
@@ -110,18 +156,18 @@ export default function Home() {
 
   // Cycle strength comparison
   const cycleComparisonData = {
-    labels: ANALYSIS_DATA.politicians.map(p => p.name.split(' ').pop()),
+    labels: analyticsData.politicians.map(p => p.name.split(' ').pop()),
     datasets: [
       {
         label: 'Cycle Length (days)',
-        data: ANALYSIS_DATA.politicians.map(p => p.cycle),
+        data: analyticsData.politicians.map(p => p.cycle),
         backgroundColor: 'rgba(34, 197, 94, 0.7)',
         borderColor: 'rgb(34, 197, 94)',
         borderWidth: 2
       },
       {
         label: 'Signal Strength (×100)',
-        data: ANALYSIS_DATA.politicians.map(p => p.strength * 100),
+        data: analyticsData.politicians.map(p => p.strength * 100),
         backgroundColor: 'rgba(168, 85, 247, 0.7)',
         borderColor: 'rgb(168, 85, 247)',
         borderWidth: 2
@@ -134,15 +180,15 @@ export default function Home() {
     datasets: [
       {
         label: 'Trading Profile',
-        data: ANALYSIS_DATA.politicians.map(p => ({
+        data: analyticsData.politicians.map(p => ({
           x: p.cycle,
           y: p.changes,
           r: p.trades / 10
         })),
-        backgroundColor: ANALYSIS_DATA.politicians.map((_, i) =>
+        backgroundColor: analyticsData.politicians.map((_, i) =>
           `rgba(${59 + i * 40}, ${130 + i * 20}, ${246 - i * 30}, 0.7)`
         ),
-        borderColor: ANALYSIS_DATA.politicians.map((_, i) =>
+        borderColor: analyticsData.politicians.map((_, i) =>
           `rgb(${59 + i * 40}, ${130 + i * 20}, ${246 - i * 30})`
         ),
         borderWidth: 2
@@ -152,15 +198,15 @@ export default function Home() {
 
   // Stock performance
   const stockData = {
-    labels: ANALYSIS_DATA.topStocks.map(s => s.ticker),
+    labels: analyticsData.topStocks.map(s => s.ticker),
     datasets: [
       {
         label: 'Number of Trades',
-        data: ANALYSIS_DATA.topStocks.map(s => s.trades),
-        backgroundColor: ANALYSIS_DATA.topStocks.map(s =>
+        data: analyticsData.topStocks.map(s => s.trades),
+        backgroundColor: analyticsData.topStocks.map(s =>
           s.change > 0 ? 'rgba(34, 197, 94, 0.7)' : 'rgba(239, 68, 68, 0.7)'
         ),
-        borderColor: ANALYSIS_DATA.topStocks.map(s =>
+        borderColor: analyticsData.topStocks.map(s =>
           s.change > 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
         ),
         borderWidth: 2
@@ -250,11 +296,11 @@ export default function Home() {
             </p>
             <div className="flex items-center justify-center gap-6 text-sm text-gray-400">
               <span className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                Live Analysis
+                <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`}></div>
+                {isLive ? 'Live Analysis' : 'Offline Mode'}
               </span>
-              <span>564 Trades Analyzed</span>
-              <span>5 Politicians Tracked</span>
+              <span>{analyticsData.totalTrades} Trades Analyzed</span>
+              <span>{analyticsData.politicians.length} Politicians Tracked</span>
               <span>FFT + HMM + DTW Algorithms</span>
             </div>
           </motion.div>
@@ -268,7 +314,7 @@ export default function Home() {
           >
             {/* Politician Selector */}
             <div className="flex flex-wrap gap-2 mb-6">
-              {ANALYSIS_DATA.politicians.map((pol, idx) => (
+              {analyticsData.politicians.map((pol, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedPolitician(idx)}
@@ -286,11 +332,11 @@ export default function Home() {
             {/* Selected Politician Stats */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
               {[
-                { label: 'Cycle Period', value: `${ANALYSIS_DATA.politicians[selectedPolitician].cycle} days`, sublabel: ANALYSIS_DATA.politicians[selectedPolitician].type },
-                { label: 'Signal Strength', value: `${(ANALYSIS_DATA.politicians[selectedPolitician].strength * 100).toFixed(1)}%`, sublabel: 'FFT Power' },
-                { label: 'Total Trades', value: ANALYSIS_DATA.politicians[selectedPolitician].trades, sublabel: '2-year period' },
-                { label: 'Current Regime', value: 'High', sublabel: ANALYSIS_DATA.politicians[selectedPolitician].regime.split(' ')[1] },
-                { label: 'Regime Changes', value: ANALYSIS_DATA.politicians[selectedPolitician].changes, sublabel: 'Last 30 days' }
+                { label: 'Cycle Period', value: `${analyticsData.politicians[selectedPolitician].cycle} days`, sublabel: analyticsData.politicians[selectedPolitician].type },
+                { label: 'Signal Strength', value: `${(analyticsData.politicians[selectedPolitician].strength * 100).toFixed(1)}%`, sublabel: 'FFT Power' },
+                { label: 'Total Trades', value: analyticsData.politicians[selectedPolitician].trades, sublabel: '2-year period' },
+                { label: 'Current Regime', value: 'High', sublabel: analyticsData.politicians[selectedPolitician].regime.split(' ')[1] },
+                { label: 'Regime Changes', value: analyticsData.politicians[selectedPolitician].changes, sublabel: 'Last 30 days' }
               ].map((stat, idx) => (
                 <div key={idx} className="bg-gray-700/30 rounded-lg p-4 border border-gray-600/30">
                   <div className="text-xs text-gray-400 mb-1">{stat.label}</div>
@@ -308,7 +354,7 @@ export default function Home() {
                   ...chartOptions.plugins,
                   title: {
                     display: true,
-                    text: `${ANALYSIS_DATA.politicians[selectedPolitician].name} - Trading Pattern Analysis (365 Days)`,
+                    text: `${analyticsData.politicians[selectedPolitician].name} - Trading Pattern Analysis (365 Days)`,
                     color: '#f3f4f6',
                     font: {
                       size: 16,
@@ -447,7 +493,7 @@ export default function Home() {
             className="mt-8 text-center text-sm text-gray-500"
           >
             <p>Analysis powered by FFT Cyclical Detection, Hidden Markov Models, and Dynamic Time Warping</p>
-            <p className="mt-1">Data: 564 trades | Period: Jan 2023 - Dec 2024 | Last updated: {ANALYSIS_DATA.analysisDate}</p>
+            <p className="mt-1">Data: 564 trades | Period: Jan 2023 - Dec 2024 | Last updated: {analyticsData.analysisDate}</p>
           </motion.div>
         </div>
       </div>
