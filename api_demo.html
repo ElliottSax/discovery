@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Politician Trading Analytics - Live Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e5e7eb;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: 3rem;
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #9ca3af;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #f3f4f6;
+        }
+
+        .stat-box {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+
+        .stat-subtext {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 3px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-top: 20px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #9ca3af;
+        }
+
+        .error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            color: #fca5a5;
+            text-align: center;
+        }
+
+        .politician-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .politician-item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .politician-name {
+            font-weight: 500;
+        }
+
+        .politician-stats {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .stock-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .stock-item {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .stock-ticker {
+            font-weight: bold;
+            font-size: 16px;
+            color: #34d399;
+        }
+
+        .stock-trades {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Politician Trading Intelligence</h1>
+            <p style="font-size: 18px; color: #d1d5db;">Advanced Pattern Recognition & Regime Detection</p>
+            <div class="status">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="status-dot"></div>
+                    <span id="liveStatus">Live Analysis</span>
+                </div>
+                <span id="totalTrades">Loading...</span>
+                <span id="totalPoliticians">Loading...</span>
+                <span>FFT + HMM Algorithms</span>
+            </div>
+        </div>
+
+        <div id="content" class="loading">
+            Loading analytics data...
+        </div>
+    </div>
+
+    <script>
+        let analyticsData = null;
+
+        async function fetchAnalytics() {
+            try {
+                const response = await fetch('http://localhost:8000/api/v1/dashboard/analytics');
+                if (!response.ok) throw new Error('API unavailable');
+
+                analyticsData = await response.json();
+                document.getElementById('liveStatus').textContent = 'Live Analysis';
+                document.getElementById('totalTrades').textContent = `${analyticsData.totalTrades} Trades`;
+                document.getElementById('totalPoliticians').textContent = `${analyticsData.politicians.length} Politicians`;
+
+                renderDashboard();
+            } catch (error) {
+                console.error('API Error:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="error">
+                        <h3>API Connection Error</h3>
+                        <p>Make sure the API server is running at http://localhost:8000</p>
+                        <p style="margin-top: 10px; font-size: 14px;">Error: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function renderDashboard() {
+            const content = document.getElementById('content');
+            content.innerHTML = `
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-title">📊 Top Politicians</div>
+                        <div class="politician-list" id="politicianList"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🏢 Most Traded Stocks</div>
+                        <div class="stock-list" id="stockList"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title">🔍 Analysis Summary</div>
+                        <div id="summaryStats"></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">📈 Trading Cycle Comparison</div>
+                    <div class="chart-container">
+                        <canvas id="cycleChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 20px;">
+                    <div class="card-title">⚡ Regime Volatility</div>
+                    <div class="chart-container">
+                        <canvas id="volatilityChart"></canvas>
+                    </div>
+                </div>
+            `;
+
+            renderPoliticians();
+            renderStocks();
+            renderSummary();
+            renderCharts();
+        }
+
+        function renderPoliticians() {
+            const list = document.getElementById('politicianList');
+            analyticsData.politicians.forEach(pol => {
+                list.innerHTML += `
+                    <div class="politician-item">
+                        <div class="politician-name">${pol.name}</div>
+                        <div class="politician-stats">
+                            <span>${pol.cycle}d cycle</span>
+                            <span>${pol.trades} trades</span>
+                            <span>${pol.changes} changes</span>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderStocks() {
+            const list = document.getElementById('stockList');
+            analyticsData.topStocks.slice(0, 8).forEach(stock => {
+                list.innerHTML += `
+                    <div class="stock-item">
+                        <div class="stock-ticker">${stock.ticker}</div>
+                        <div class="stock-trades">${stock.trades} trades</div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderSummary() {
+            const container = document.getElementById('summaryStats');
+            const shortestCycle = analyticsData.politicians.reduce((min, p) => p.cycle < min.cycle ? p : min);
+            const longestCycle = analyticsData.politicians.reduce((max, p) => p.cycle > max.cycle ? p : max);
+            const mostVolatile = analyticsData.politicians.reduce((max, p) => p.changes > max.changes ? p : max);
+
+            container.innerHTML = `
+                <div class="stat-box">
+                    <div class="stat-label">Shortest Cycle</div>
+                    <div class="stat-value">${shortestCycle.cycle} days</div>
+                    <div class="stat-subtext">${shortestCycle.name} (${shortestCycle.type})</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Longest Cycle</div>
+                    <div class="stat-value">${longestCycle.cycle} days</div>
+                    <div class="stat-subtext">${longestCycle.name} (${longestCycle.type})</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Most Volatile</div>
+                    <div class="stat-value">${mostVolatile.changes} changes</div>
+                    <div class="stat-subtext">${mostVolatile.name} (30 days)</div>
+                </div>
+            `;
+        }
+
+        function renderCharts() {
+            // Cycle comparison chart
+            const cycleCtx = document.getElementById('cycleChart').getContext('2d');
+            new Chart(cycleCtx, {
+                type: 'bar',
+                data: {
+                    labels: analyticsData.politicians.map(p => p.name.split(' ').pop()),
+                    datasets: [{
+                        label: 'Cycle Length (days)',
+                        data: analyticsData.politicians.map(p => p.cycle),
+                        backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                        borderColor: 'rgb(34, 197, 94)',
+                        borderWidth: 2
+                    }, {
+                        label: 'Signal Strength (×100)',
+                        data: analyticsData.politicians.map(p => p.strength * 100),
+                        backgroundColor: 'rgba(168, 85, 247, 0.7)',
+                        borderColor: 'rgb(168, 85, 247)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: '#e5e7eb' }
+                        }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(75, 85, 99, 0.2)' } },
+                        y: { ticks: { color: '#9ca3af' }, grid: { color: 'rgba(75, 85, 99, 0.2)' } }
+                    }
+                }
+            });
+
+            // Volatility chart
+            const volatilityCtx = document.getElementById('volatilityChart').getContext('2d');
+            new Chart(volatilityCtx, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Trading Profile',
+                        data: analyticsData.politicians.map(p => ({
+                            x: p.cycle,
+                            y: p.changes,
+                            r: p.trades / 10
+                        })),
+                        backgroundColor: analyticsData.politicians.map((_, i) =>
+                            `rgba(${59 + i * 40}, ${130 + i * 20}, ${246 - i * 30}, 0.7)`
+                        )
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#e5e7eb' } }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Cycle Length (days)', color: '#9ca3af' },
+                            ticks: { color: '#9ca3af' },
+                            grid: { color: 'rgba(75, 85, 99, 0.2)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Regime Changes (30d)', color: '#9ca3af' },
+                            ticks: { color: '#9ca3af' },
+                            grid: { color: 'rgba(75, 85, 99, 0.2)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initial load
+        fetchAnalytics();
+
+        // Auto-refresh every 60 seconds
+        setInterval(fetchAnalytics, 60000);
+    </script>
+</body>
+</html>
