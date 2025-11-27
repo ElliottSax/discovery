@@ -108,9 +108,21 @@ async def get_politicians(
     
     # Load data (in production, query database)
     data_dir = Path("./data/pipeline")
-    latest_file = max(data_dir.glob("trades_*.json"), key=lambda p: p.stat().st_mtime, default=None)
-    
-    if not latest_file:
+
+    # Check if directory exists
+    if not data_dir.exists():
+        logger.warning(f"Pipeline data directory not found: {data_dir}")
+        return []
+
+    # Find latest file
+    try:
+        files = list(data_dir.glob("trades_*.json"))
+        if not files:
+            logger.warning("No trade data files found in pipeline directory")
+            return []
+        latest_file = max(files, key=lambda p: p.stat().st_mtime)
+    except Exception as e:
+        logger.error(f"Error finding pipeline data files: {e}")
         return []
         
     with open(latest_file) as f:
@@ -161,10 +173,22 @@ async def get_politician_details(politician_name: str, request: Request = None):
     
     # Load data
     data_dir = Path("./data/pipeline")
-    latest_file = max(data_dir.glob("trades_*.json"), key=lambda p: p.stat().st_mtime, default=None)
-    
-    if not latest_file:
-        raise HTTPException(status_code=404, detail="No data available")
+
+    # Check if directory exists
+    if not data_dir.exists():
+        raise HTTPException(status_code=503, detail="Pipeline data not yet generated")
+
+    # Find latest file
+    try:
+        files = list(data_dir.glob("trades_*.json"))
+        if not files:
+            raise HTTPException(status_code=404, detail="No trade data available")
+        latest_file = max(files, key=lambda p: p.stat().st_mtime)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error loading pipeline data: {e}")
+        raise HTTPException(status_code=500, detail="Error loading data")
         
     with open(latest_file) as f:
         trades = json.load(f)
@@ -237,11 +261,23 @@ async def get_trades(
     
     # Load data
     data_dir = Path("./data/pipeline")
-    latest_file = max(data_dir.glob("trades_*.json"), key=lambda p: p.stat().st_mtime, default=None)
-    
-    if not latest_file:
+
+    # Check if directory exists
+    if not data_dir.exists():
+        logger.warning(f"Pipeline data directory not found: {data_dir}")
         return []
-        
+
+    # Find latest file
+    try:
+        files = list(data_dir.glob("trades_*.json"))
+        if not files:
+            logger.warning("No trade data files found in pipeline directory")
+            return []
+        latest_file = max(files, key=lambda p: p.stat().st_mtime)
+    except Exception as e:
+        logger.error(f"Error finding pipeline data files: {e}")
+        return []
+
     with open(latest_file) as f:
         trades = json.load(f)
         
