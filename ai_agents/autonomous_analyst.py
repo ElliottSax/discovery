@@ -114,11 +114,12 @@ class AutonomousAnalyst:
                 cur.execute("""
                     SELECT
                         t.*,
+                        p.name as politician_name,
                         p.chamber,
                         p.state,
                         p.party
                     FROM trades t
-                    LEFT JOIN politicians p ON t.politician_name = p.name
+                    LEFT JOIN politicians p ON t.politician_id = p.id
                     ORDER BY t.transaction_date DESC
                 """)
 
@@ -129,8 +130,14 @@ class AutonomousAnalyst:
                     # Convert dates to strings
                     if trade.get('transaction_date'):
                         trade['transaction_date'] = trade['transaction_date'].isoformat()
-                    if trade.get('filing_date'):
-                        trade['filing_date'] = trade['filing_date'].isoformat()
+                    if trade.get('disclosure_date'):
+                        trade['disclosure_date'] = trade['disclosure_date'].isoformat()
+
+                    # Convert Decimal to float for ML processing
+                    if trade.get('amount_min'):
+                        trade['amount_min'] = float(trade['amount_min'])
+                    if trade.get('amount_max'):
+                        trade['amount_max'] = float(trade['amount_max'])
 
                     trades.append(trade)
 

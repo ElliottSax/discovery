@@ -40,18 +40,18 @@ class PipelineGenerator:
                 cur.execute("""
                     SELECT
                         t.id,
-                        t.politician_name,
+                        p.name as politician_name,
                         t.ticker,
                         t.transaction_date,
                         t.transaction_type,
                         t.amount_min,
                         t.amount_max,
-                        t.filing_date,
+                        t.disclosure_date as filing_date,
                         p.chamber,
                         p.state,
                         p.party
                     FROM trades t
-                    LEFT JOIN politicians p ON t.politician_name = p.name
+                    LEFT JOIN politicians p ON t.politician_id = p.id
                     ORDER BY t.transaction_date DESC
                 """)
 
@@ -64,6 +64,12 @@ class PipelineGenerator:
                         trade['transaction_date'] = trade['transaction_date'].isoformat()
                     if trade.get('filing_date'):
                         trade['filing_date'] = trade['filing_date'].isoformat()
+
+                    # Convert Decimal to float for JSON serialization
+                    if trade.get('amount_min'):
+                        trade['amount_min'] = float(trade['amount_min'])
+                    if trade.get('amount_max'):
+                        trade['amount_max'] = float(trade['amount_max'])
 
                     trades.append(trade)
 
@@ -138,9 +144,10 @@ class PipelineGenerator:
 
                 # Most active politicians
                 cur.execute("""
-                    SELECT politician_name, COUNT(*) as trade_count
-                    FROM trades
-                    GROUP BY politician_name
+                    SELECT p.name as politician_name, COUNT(*) as trade_count
+                    FROM trades t
+                    JOIN politicians p ON t.politician_id = p.id
+                    GROUP BY p.name
                     ORDER BY trade_count DESC
                     LIMIT 20
                 """)
