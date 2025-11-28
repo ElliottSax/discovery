@@ -18,6 +18,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from ai_agents.llm_router import get_llm_router, generate_with_retry
 from ml_models.advanced_models import EnsemblePatternDetector
+from ml_models.quant_patterns import QuantitativePatternDetector
+from ai_agents.deepseek_ultra import DeepSeekUltra
+from ai_agents.adaptive_learning import AdaptiveLearning, PatternScorer
 from data_pipeline.db_to_pipeline import PipelineGenerator
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -31,6 +34,10 @@ class AutonomousAnalyst:
     def __init__(self):
         self.llm_router = get_llm_router()
         self.ml_detector = EnsemblePatternDetector()
+        self.quant_detector = QuantitativePatternDetector()
+        self.deepseek_ultra = DeepSeekUltra()
+        self.adaptive_learning = AdaptiveLearning()
+        self.pattern_scorer = PatternScorer()
         self.pipeline_gen = PipelineGenerator()
 
         self.db_params = {
@@ -53,6 +60,11 @@ class AutonomousAnalyst:
         logger.info(f"=== Starting Analysis Cycle #{self.analysis_count + 1} ===")
 
         try:
+            # Step 0: Learn from past discoveries and optimize parameters
+            learning_result = self.adaptive_learning.learn_from_discoveries()
+            suggested_params = self.adaptive_learning.suggest_parameters()
+            logger.info(f"Adaptive learning: {learning_result.get('patterns_analyzed', 0)} patterns analyzed")
+
             # Step 1: Load fresh data from database
             trades = self._load_trades_from_db()
             logger.info(f"Loaded {len(trades)} trades from database")
@@ -61,33 +73,67 @@ class AutonomousAnalyst:
             ml_patterns = self.ml_detector.detect_all_patterns(trades)
             logger.info(f"ML detected {len(ml_patterns.get('novel_discoveries', []))} novel patterns")
 
-            # Step 3: Use LLM to analyze and interpret patterns
+            # Step 2b: Run quantitative pattern detection (NEW!)
+            quant_patterns = self.quant_detector.detect_all_quant_patterns(trades)
+            logger.info(f"Quant detected {len(quant_patterns.get('statistical_patterns', []))} statistical patterns")
+
+            # Step 3: Prepare data summary
+            data_summary = self._prepare_data_summary(trades, ml_patterns)
+            data_summary['quant_patterns'] = quant_patterns
+
+            # Step 4: Generate hypotheses using DeepSeek Ultra (NEW!)
+            hypotheses = await self.deepseek_ultra.generate_hypotheses(data_summary, ml_patterns)
+            logger.info(f"DeepSeek generated {len(hypotheses)} hypotheses")
+
+            # Step 5: Use AI to discover novel patterns (NEW!)
+            known_patterns = ml_patterns.get('novel_discoveries', [])
+            ai_novel_patterns = await self.deepseek_ultra.discover_novel_patterns(trades, known_patterns)
+            logger.info(f"AI discovered {len(ai_novel_patterns)} novel patterns")
+
+            # Step 6: Use LLM to analyze and interpret patterns
             llm_analysis = await self._llm_deep_analysis(trades, ml_patterns)
             logger.info(f"LLM analysis complete")
 
-            # Step 4: Generate hypotheses about why patterns exist
-            hypotheses = await self._generate_hypotheses(ml_patterns, llm_analysis)
-            logger.info(f"Generated {len(hypotheses)} hypotheses")
-
-            # Step 5: Find unusual/novel patterns that need attention
-            novel_findings = self._extract_novel_findings(ml_patterns, llm_analysis, hypotheses)
+            # Step 7: Find unusual/novel patterns that need attention
+            novel_findings = self._extract_novel_findings(
+                ml_patterns, quant_patterns, llm_analysis, hypotheses, ai_novel_patterns
+            )
             logger.info(f"Found {len(novel_findings)} novel findings")
 
-            # Step 6: Store discoveries
-            if novel_findings:
-                self._store_discoveries(novel_findings)
+            # Step 8: Score and rank all findings (NEW!)
+            scored_findings = self.pattern_scorer.rank_patterns(novel_findings)
+            high_priority = [f for f in scored_findings if f['scoring']['priority'] in ['critical', 'high']]
+            logger.info(f"Scored findings: {len(high_priority)} high priority")
 
-            # Step 7: Generate pipeline data for API
+            # Step 9: Deep analysis of top patterns using DeepSeek (NEW!)
+            deep_analyses = []
+            for finding in high_priority[:3]:  # Analyze top 3
+                if self.adaptive_learning.should_investigate_deeper(finding):
+                    analysis = await self.deepseek_ultra.deep_pattern_analysis(finding)
+                    deep_analyses.append(analysis)
+            logger.info(f"Deep analysis completed on {len(deep_analyses)} patterns")
+
+            # Step 10: Store discoveries
+            if scored_findings:
+                self._store_discoveries(scored_findings)
+
+            # Step 11: Generate pipeline data for API
             self.pipeline_gen.generate_all()
 
             result = {
                 "cycle": self.analysis_count + 1,
                 "timestamp": datetime.now().isoformat(),
                 "trades_analyzed": len(trades),
+                "learning_stats": learning_result,
+                "suggested_params": suggested_params,
                 "ml_patterns": ml_patterns,
+                "quant_patterns": quant_patterns,
                 "llm_analysis": llm_analysis,
                 "hypotheses": hypotheses,
-                "novel_findings": novel_findings,
+                "ai_novel_patterns": ai_novel_patterns,
+                "novel_findings": len(novel_findings),
+                "high_priority_findings": len(high_priority),
+                "deep_analyses": deep_analyses,
                 "total_discoveries": self.discoveries_count
             }
 
@@ -318,7 +364,9 @@ RESPOND IN JSON:
             "mimicry_pairs": len(ml_patterns.get('cross_patterns', {}).get('mimicry_patterns', []))
         }
 
-    def _extract_novel_findings(self, ml_patterns: Dict, llm_analysis: Dict, hypotheses: List[Dict]) -> List[Dict]:
+    def _extract_novel_findings(self, ml_patterns: Dict, quant_patterns: Dict,
+                                 llm_analysis: Dict, hypotheses: List[Dict],
+                                 ai_novel_patterns: List[Dict]) -> List[Dict]:
         """Extract truly novel and significant findings"""
 
         findings = []
@@ -359,6 +407,32 @@ RESPOND IN JSON:
                     "timestamp": datetime.now().isoformat()
                 })
 
+        # Quantitative statistical patterns (NEW!)
+        for stat_pattern in quant_patterns.get('statistical_patterns', []):
+            if stat_pattern.get('significant'):
+                findings.append({
+                    "type": "quant_statistical",
+                    "finding": stat_pattern,
+                    "timestamp": datetime.now().isoformat()
+                })
+
+        # Quantitative anomalies (NEW!)
+        for anomaly in quant_patterns.get('anomalies', []):
+            findings.append({
+                "type": "quant_anomaly",
+                "finding": anomaly,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        # AI-discovered novel patterns (NEW!)
+        for ai_pattern in ai_novel_patterns:
+            if ai_pattern.get('significance') in ['high', 'medium']:
+                findings.append({
+                    "type": "ai_novel_pattern",
+                    "finding": ai_pattern,
+                    "timestamp": datetime.now().isoformat()
+                })
+
         # High likelihood hypotheses
         for hypothesis in hypotheses:
             if hypothesis.get('likelihood', 0) > 0.7:
@@ -391,6 +465,8 @@ RESPOND IN JSON:
             "analysis_cycles_completed": self.analysis_count,
             "total_discoveries": self.discoveries_count,
             "llm_stats": self.llm_router.get_stats(),
+            "deepseek_stats": self.deepseek_ultra.get_stats(),
+            "learning_stats": self.adaptive_learning.get_learning_stats(),
             "discoveries_file": str(self.discoveries_file),
             "uptime": "24/7"
         }
