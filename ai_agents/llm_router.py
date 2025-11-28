@@ -17,57 +17,74 @@ logger = logging.getLogger(__name__)
 
 class LLMProvider(Enum):
     """Available LLM providers ranked by cost (cheapest first)"""
-    DEEPSEEK = "deepseek"  # $0.14/M tokens (cheapest!)
+    GROQ = "groq"  # FREE tier, ultra-fast! (500+ tokens/sec)
+    OLLAMA = "ollama"  # FREE local inference, unlimited
+    DEEPSEEK = "deepseek"  # $0.14/M tokens (cheapest paid)
     TOGETHER = "together"  # $0.20/M tokens
     OPENROUTER_QWEN = "openrouter_qwen"  # $0.20/M tokens (Alibaba)
     OPENROUTER_LLAMA = "openrouter_llama"  # $0.18/M tokens
-    GROQ = "groq"  # Free tier, rate limited
-    LOCAL = "local"  # Free but slower
+    LOCAL = "local"  # Fallback placeholder
 
 class LLMRouter:
     """Routes LLM requests to the cheapest available provider"""
 
     # API endpoints
     ENDPOINTS = {
+        LLMProvider.GROQ: "https://api.groq.com/openai/v1/chat/completions",
+        LLMProvider.OLLAMA: "http://localhost:11434/api/generate",  # Local
         LLMProvider.DEEPSEEK: "https://api.deepseek.com/v1/chat/completions",
         LLMProvider.TOGETHER: "https://api.together.xyz/v1/chat/completions",
         LLMProvider.OPENROUTER_QWEN: "https://openrouter.ai/api/v1/chat/completions",
         LLMProvider.OPENROUTER_LLAMA: "https://openrouter.ai/api/v1/chat/completions",
-        LLMProvider.GROQ: "https://api.groq.com/openai/v1/chat/completions",
     }
 
     # Model names
     MODELS = {
+        LLMProvider.GROQ: "llama-3.1-70b-versatile",
+        LLMProvider.OLLAMA: "llama3:8b",
         LLMProvider.DEEPSEEK: "deepseek-chat",
         LLMProvider.TOGETHER: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
         LLMProvider.OPENROUTER_QWEN: "qwen/qwen-2.5-72b-instruct",
         LLMProvider.OPENROUTER_LLAMA: "meta-llama/llama-3.1-70b-instruct",
-        LLMProvider.GROQ: "llama-3.1-70b-versatile",
     }
 
     # Cost per million tokens (input/output)
     COSTS = {
+        LLMProvider.GROQ: (0.0, 0.0),  # FREE tier!
+        LLMProvider.OLLAMA: (0.0, 0.0),  # FREE local!
         LLMProvider.DEEPSEEK: (0.14, 0.28),
         LLMProvider.TOGETHER: (0.20, 0.20),
         LLMProvider.OPENROUTER_QWEN: (0.20, 0.20),
         LLMProvider.OPENROUTER_LLAMA: (0.18, 0.18),
-        LLMProvider.GROQ: (0.0, 0.0),  # Free tier
-        LLMProvider.LOCAL: (0.0, 0.0),  # Free
+        LLMProvider.LOCAL: (0.0, 0.0),  # Fallback
     }
 
     def __init__(self):
         """Initialize LLM router with API keys from environment"""
         self.api_keys = {
+            LLMProvider.GROQ: os.getenv("GROQ_API_KEY"),
+            LLMProvider.OLLAMA: self._check_ollama(),  # Check if Ollama is running
             LLMProvider.DEEPSEEK: os.getenv("DEEPSEEK_API_KEY"),
             LLMProvider.TOGETHER: os.getenv("TOGETHER_API_KEY"),
             LLMProvider.OPENROUTER_QWEN: os.getenv("OPENROUTER_API_KEY"),
             LLMProvider.OPENROUTER_LLAMA: os.getenv("OPENROUTER_API_KEY"),
-            LLMProvider.GROQ: os.getenv("GROQ_API_KEY"),
         }
 
         self.total_cost = 0.0
         self.request_count = 0
         self.provider_stats = {provider: {"requests": 0, "cost": 0.0} for provider in LLMProvider}
+
+    def _check_ollama(self) -> Optional[str]:
+        """Check if Ollama is available"""
+        try:
+            import requests
+            response = requests.get("http://localhost:11434/api/tags", timeout=1)
+            if response.status_code == 200:
+                logger.info("Ollama detected and available")
+                return "available"  # Use non-None value to indicate availability
+        except:
+            pass
+        return None
 
     def get_available_providers(self) -> List[LLMProvider]:
         """Get list of available providers with API keys"""
