@@ -131,8 +131,8 @@ class AutonomousAnalyst:
                 "llm_analysis": llm_analysis,
                 "hypotheses": hypotheses,
                 "ai_novel_patterns": ai_novel_patterns,
-                "novel_findings": len(novel_findings),
-                "high_priority_findings": len(high_priority),
+                "novel_findings": scored_findings,  # Return full list for orchestrator
+                "high_priority_findings": high_priority,
                 "deep_analyses": deep_analyses,
                 "total_discoveries": self.discoveries_count
             }
