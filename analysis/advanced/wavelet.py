@@ -483,6 +483,368 @@ class WaveletPatternDetector:
         return interpretation
 
 
+class MultiResolutionWaveletAnalyzer:
+    """
+    Multi-Resolution Wavelet Analysis using Discrete Wavelet Transform.
+
+    Decomposes signal into multiple scales simultaneously using wavelet pyramid,
+    revealing hierarchical patterns and cross-scale dependencies.
+
+    Key Features:
+    - Pyramid decomposition (coarse to fine scales)
+    - Cross-scale correlations
+    - Scale-specific pattern extraction
+    - Hierarchical anomaly detection
+
+    Use Cases:
+    - Multi-timescale trading patterns (daily + weekly + monthly)
+    - Scale-dependent correlations (intraday vs long-term)
+    - Hierarchical regime detection
+    - Cross-scale causality
+    """
+
+    def __init__(
+        self,
+        wavelet: str = 'db4',
+        max_level: Optional[int] = None,
+        mode: str = 'symmetric'
+    ):
+        """
+        Initialize multi-resolution analyzer.
+
+        Args:
+            wavelet: Discrete wavelet family
+                - 'db4' (Daubechies 4, good for finance)
+                - 'sym5' (Symlets, symmetric)
+                - 'coif3' (Coiflets, smooth)
+                - 'bior3.5' (Biorthogonal, good for edges)
+            max_level: Maximum decomposition level (None = auto)
+            mode: Signal extension mode ('symmetric', 'periodic', 'zero')
+        """
+        self.wavelet = wavelet
+        self.max_level = max_level
+        self.mode = mode
+
+        logger.info(f"Initialized MultiResolutionWaveletAnalyzer with {wavelet}")
+
+    def decompose(
+        self,
+        time_series: Union[pd.Series, np.ndarray]
+    ) -> Dict:
+        """
+        Perform multi-resolution decomposition.
+
+        Decomposes signal into approximation (low-frequency trend) and
+        details (high-frequency fluctuations) at multiple scales.
+
+        Returns:
+            {
+                'approximations': [A1, A2, ..., An] (coarse to fine),
+                'details': [D1, D2, ..., Dn] (coarse to fine),
+                'reconstruction_error': Numerical error in reconstruction,
+                'energy_distribution': Energy at each scale,
+                'level_names': ['D1 (2-4 days)', 'D2 (4-8 days)', ...],
+                'max_level': Number of decomposition levels
+            }
+        """
+        # Convert to array
+        if isinstance(time_series, pd.Series):
+            data = time_series.values
+            index = time_series.index
+        else:
+            data = np.array(time_series)
+            index = None
+
+        # Determine max level if not specified
+        if self.max_level is None:
+            max_level = pywt.dwt_max_level(len(data), self.wavelet)
+        else:
+            max_level = min(self.max_level, pywt.dwt_max_level(len(data), self.wavelet))
+
+        # Perform multi-level decomposition
+        coeffs = pywt.wavedec(data, self.wavelet, level=max_level, mode=self.mode)
+
+        # coeffs = [cAn, cDn, cDn-1, ..., cD1]
+        # cAn = approximation at level n (coarsest)
+        # cDi = details at level i
+
+        approximation = coeffs[0]
+        details = coeffs[1:][::-1]  # Reverse to go from coarse to fine
+
+        # Reconstruct each level separately
+        approximations = []
+        detail_reconstructions = []
+
+        for level in range(1, max_level + 1):
+            # Reconstruct approximation at this level
+            approx_coeffs = [coeffs[0]] + [np.zeros_like(c) for c in coeffs[1:level]] + coeffs[level:]
+            approx_recon = pywt.waverec(approx_coeffs, self.wavelet, mode=self.mode)
+            approximations.append(approx_recon[:len(data)])
+
+            # Reconstruct detail at this level
+            detail_coeffs = [np.zeros_like(coeffs[0])] + [np.zeros_like(c) for c in coeffs[1:level]] + [coeffs[level]] + [np.zeros_like(c) for c in coeffs[level+1:]]
+            detail_recon = pywt.waverec(detail_coeffs, self.wavelet, mode=self.mode)
+            detail_reconstructions.append(detail_recon[:len(data)])
+
+        # Calculate reconstruction error
+        reconstructed = sum(detail_reconstructions) + approximations[-1]
+        reconstruction_error = np.linalg.norm(data - reconstructed[:len(data)]) / np.linalg.norm(data)
+
+        # Calculate energy distribution
+        total_energy = np.sum(data**2)
+        energy_dist = []
+        for detail in detail_reconstructions:
+            energy = np.sum(detail**2) / total_energy
+            energy_dist.append(energy)
+
+        # Generate level names with time scale interpretations
+        level_names = []
+        for i in range(1, max_level + 1):
+            scale_days = 2**i
+            level_names.append(f"D{i} ({scale_days//2}-{scale_days} days)")
+
+        return {
+            'approximations': approximations,
+            'details': detail_reconstructions,
+            'raw_coeffs': coeffs,
+            'reconstruction_error': float(reconstruction_error),
+            'energy_distribution': energy_dist,
+            'level_names': level_names,
+            'max_level': max_level,
+            'time_index': index
+        }
+
+    def detect_cross_scale_correlations(
+        self,
+        decomposition: Dict,
+        significance_threshold: float = 0.3
+    ) -> Dict:
+        """
+        Detect correlations between different scales.
+
+        Cross-scale correlations indicate hierarchical dependencies,
+        e.g., monthly patterns modulating weekly patterns.
+
+        Args:
+            decomposition: Result from decompose()
+            significance_threshold: Minimum correlation to report
+
+        Returns:
+            {
+                'correlation_matrix': NxN matrix of scale correlations,
+                'significant_pairs': [(scale_i, scale_j, correlation)],
+                'interpretation': Human-readable description
+            }
+        """
+        details = decomposition['details']
+        n_levels = len(details)
+
+        # Correlation matrix
+        corr_matrix = np.zeros((n_levels, n_levels))
+
+        for i in range(n_levels):
+            for j in range(n_levels):
+                if i == j:
+                    corr_matrix[i, j] = 1.0
+                else:
+                    # Align lengths (use shorter length)
+                    min_len = min(len(details[i]), len(details[j]))
+                    corr = np.corrcoef(details[i][:min_len], details[j][:min_len])[0, 1]
+                    corr_matrix[i, j] = corr
+
+        # Find significant correlations
+        significant_pairs = []
+        for i in range(n_levels):
+            for j in range(i + 1, n_levels):
+                if abs(corr_matrix[i, j]) >= significance_threshold:
+                    significant_pairs.append({
+                        'scale_1': decomposition['level_names'][i],
+                        'scale_2': decomposition['level_names'][j],
+                        'correlation': float(corr_matrix[i, j]),
+                        'interpretation': self._interpret_cross_scale(
+                            i, j, corr_matrix[i, j], decomposition['level_names']
+                        )
+                    })
+
+        # Sort by absolute correlation
+        significant_pairs.sort(key=lambda x: abs(x['correlation']), reverse=True)
+
+        return {
+            'correlation_matrix': corr_matrix.tolist(),
+            'significant_pairs': significant_pairs,
+            'n_significant': len(significant_pairs),
+            'level_names': decomposition['level_names']
+        }
+
+    def _interpret_cross_scale(
+        self,
+        i: int,
+        j: int,
+        correlation: float,
+        level_names: List[str]
+    ) -> str:
+        """Interpret cross-scale correlation."""
+        if correlation > 0.5:
+            relationship = "strong positive coupling"
+        elif correlation > 0.3:
+            relationship = "moderate positive coupling"
+        elif correlation < -0.5:
+            relationship = "strong negative coupling"
+        elif correlation < -0.3:
+            relationship = "moderate negative coupling"
+        else:
+            relationship = "weak coupling"
+
+        return f"{level_names[i]} and {level_names[j]} show {relationship}"
+
+    def extract_scale_specific_patterns(
+        self,
+        decomposition: Dict,
+        scale_level: int
+    ) -> Dict:
+        """
+        Extract patterns from specific scale.
+
+        Args:
+            decomposition: Result from decompose()
+            scale_level: Level to analyze (1 = finest, max_level = coarsest)
+
+        Returns:
+            {
+                'level': Level number,
+                'level_name': Time scale description,
+                'detail_signal': Reconstructed detail at this level,
+                'peaks': Local maxima locations,
+                'troughs': Local minima locations,
+                'energy': Total energy at this scale,
+                'dominant_frequency': Main frequency component
+            }
+        """
+        if scale_level < 1 or scale_level > decomposition['max_level']:
+            raise ValueError(f"Invalid scale_level: {scale_level}")
+
+        detail = decomposition['details'][scale_level - 1]
+
+        # Find peaks and troughs
+        from scipy.signal import find_peaks
+
+        peaks, peak_properties = find_peaks(detail, prominence=np.std(detail) * 0.5)
+        troughs, trough_properties = find_peaks(-detail, prominence=np.std(detail) * 0.5)
+
+        # Calculate energy
+        energy = np.sum(detail**2)
+
+        # Dominant frequency (from peak spacing)
+        if len(peaks) > 1:
+            peak_spacing = np.diff(peaks)
+            dominant_period = np.median(peak_spacing) if len(peak_spacing) > 0 else 0
+        else:
+            dominant_period = 0
+
+        return {
+            'level': scale_level,
+            'level_name': decomposition['level_names'][scale_level - 1],
+            'detail_signal': detail.tolist(),
+            'peaks': peaks.tolist(),
+            'troughs': troughs.tolist(),
+            'n_peaks': len(peaks),
+            'n_troughs': len(troughs),
+            'energy': float(energy),
+            'relative_energy': float(decomposition['energy_distribution'][scale_level - 1]),
+            'dominant_period': float(dominant_period),
+            'std': float(np.std(detail))
+        }
+
+    def detect_multiscale_anomalies(
+        self,
+        decomposition: Dict,
+        threshold_std: float = 3.0
+    ) -> Dict:
+        """
+        Detect anomalies across multiple scales.
+
+        An event is a multi-scale anomaly if it appears as an outlier
+        at multiple resolution levels simultaneously.
+
+        Args:
+            decomposition: Result from decompose()
+            threshold_std: Standard deviations for anomaly threshold
+
+        Returns:
+            {
+                'scale_specific_anomalies': Anomalies at each scale,
+                'multiscale_anomalies': Anomalies present at multiple scales,
+                'severity': Severity score for each anomaly
+            }
+        """
+        details = decomposition['details']
+
+        # Detect anomalies at each scale
+        scale_anomalies = []
+        for i, detail in enumerate(details):
+            threshold = np.std(detail) * threshold_std
+            anomaly_mask = np.abs(detail) > threshold
+            anomaly_indices = np.where(anomaly_mask)[0]
+
+            scale_anomalies.append({
+                'level': i + 1,
+                'level_name': decomposition['level_names'][i],
+                'anomaly_indices': anomaly_indices.tolist(),
+                'n_anomalies': len(anomaly_indices),
+                'threshold': float(threshold)
+            })
+
+        # Find multiscale anomalies (present at multiple scales)
+        # Look for temporal proximity across scales
+        multiscale = []
+        n_levels = len(details)
+
+        for level in range(n_levels):
+            for idx in scale_anomalies[level]['anomaly_indices']:
+                # Check if nearby anomalies exist at other scales
+                scales_present = [level]
+
+                for other_level in range(n_levels):
+                    if other_level == level:
+                        continue
+
+                    # Check for anomalies within ±10% of signal length
+                    tolerance = len(details[other_level]) // 10
+                    other_indices = scale_anomalies[other_level]['anomaly_indices']
+
+                    for other_idx in other_indices:
+                        if abs(other_idx - idx) <= tolerance:
+                            scales_present.append(other_level)
+                            break
+
+                # If present at multiple scales, it's a multiscale anomaly
+                if len(scales_present) >= 2:
+                    multiscale.append({
+                        'time_index': idx,
+                        'scales_affected': [decomposition['level_names'][s] for s in scales_present],
+                        'n_scales': len(scales_present),
+                        'severity': len(scales_present) / n_levels  # More scales = more severe
+                    })
+
+        # Remove duplicates
+        seen = set()
+        unique_multiscale = []
+        for anomaly in multiscale:
+            key = anomaly['time_index']
+            if key not in seen:
+                seen.add(key)
+                unique_multiscale.append(anomaly)
+
+        # Sort by severity
+        unique_multiscale.sort(key=lambda x: x['severity'], reverse=True)
+
+        return {
+            'scale_specific_anomalies': scale_anomalies,
+            'multiscale_anomalies': unique_multiscale,
+            'n_multiscale': len(unique_multiscale)
+        }
+
+
 def quick_wavelet_analysis(
     time_series: Union[pd.Series, np.ndarray],
     wavelet: str = 'morlet'
@@ -500,3 +862,31 @@ def quick_wavelet_analysis(
     result['dominant_patterns'] = detector.get_dominant_patterns(result)
 
     return result
+
+
+def quick_multiscale_analysis(
+    time_series: Union[pd.Series, np.ndarray],
+    wavelet: str = 'db4'
+) -> Dict:
+    """
+    Convenience function for quick multi-resolution analysis.
+
+    Example:
+        >>> result = quick_multiscale_analysis(stock_prices)
+        >>> print(f"Found {result['n_multiscale_anomalies']} multi-scale anomalies")
+    """
+    analyzer = MultiResolutionWaveletAnalyzer(wavelet=wavelet)
+    decomposition = analyzer.decompose(time_series)
+
+    # Add cross-scale correlations
+    correlations = analyzer.detect_cross_scale_correlations(decomposition)
+
+    # Add multiscale anomalies
+    anomalies = analyzer.detect_multiscale_anomalies(decomposition)
+
+    return {
+        **decomposition,
+        'cross_scale_correlations': correlations,
+        'anomalies': anomalies,
+        'n_multiscale_anomalies': anomalies['n_multiscale']
+    }

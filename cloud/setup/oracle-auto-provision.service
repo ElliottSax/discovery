@@ -1,0 +1,16 @@
+[Unit]
+Description=Oracle Cloud A1 Instance Auto-Provisioning
+After=network.target
+
+[Service]
+Type=simple
+User=%u
+WorkingDirectory=/mnt/e/projects/discovery/cloud/setup
+ExecStart=/mnt/e/projects/discovery/cloud/setup/auto_provision.sh
+Restart=on-failure
+RestartSec=60
+StandardOutput=append:/home/%u/.oracle_auto_provision/provision.log
+StandardError=append:/home/%u/.oracle_auto_provision/provision.log
+
+[Install]
+WantedBy=multi-user.target

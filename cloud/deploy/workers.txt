@@ -1,0 +1,9 @@
+# Oracle Cloud Free Tier Workers
+# Format: ubuntu@IP (for SSH deployment)
+
+# Active workers
+ubuntu@163.192.110.147
+ubuntu@163.192.103.233
+
+# Additional workers can be added here
+# When provisioning new VMs, add their IPs below

@@ -4,6 +4,7 @@ Generates pipeline JSON files from PostgreSQL database
 """
 
 import json
+import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from pathlib import Path
@@ -131,7 +132,12 @@ class PipelineGenerator:
                         COUNT(*) as trade_count
                     FROM trades
                     WHERE ticker IS NOT NULL
-                    GROUP BY sector
+                    GROUP BY CASE
+                        WHEN ticker IN ('AAPL', 'MSFT', 'GOOGL', 'META', 'NVDA') THEN 'Technology'
+                        WHEN ticker IN ('JPM', 'BAC', 'GS', 'MS') THEN 'Finance'
+                        WHEN ticker IN ('JNJ', 'PFE', 'UNH', 'CVS') THEN 'Healthcare'
+                        ELSE 'Other'
+                    END
                     ORDER BY trade_count DESC
                 """)
                 sectors = cur.fetchall()
@@ -220,9 +226,6 @@ class PipelineGenerator:
             logger.error(f"Error generating pipeline data: {e}")
             raise
 
-
-# Import os for environment variables
-import os
 
 # CLI usage
 if __name__ == "__main__":

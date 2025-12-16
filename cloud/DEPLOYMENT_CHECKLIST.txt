@@ -1,0 +1,81 @@
+╔════════════════════════════════════════════════════════════════════╗
+║              FREE COMPUTE DEPLOYMENT CHECKLIST                     ║
+╚════════════════════════════════════════════════════════════════════╝
+
+Track your deployments:
+
+ORACLE CLOUD (Auto-Provisioning)
+────────────────────────────────────────────────────────────────────
+[✅] Auto-provisioning script running
+[ ] Instance 1 provisioned (IP: _______________)
+[ ] Instance 2 provisioned (IP: _______________)
+[ ] Instance 3 provisioned (IP: _______________)
+[ ] Instance 4 provisioned (IP: _______________)
+[ ] Workers deployed to instances
+[ ] Workers tested and healthy
+
+Status: Attempt #19, running 24/7
+Check: tail -f ~/.oracle_auto_provision/provision.log
+
+HUGGINGFACE SPACES
+────────────────────────────────────────────────────────────────────
+[✅] Worker 1: https://elliottsax-discovery-worker-1.hf.space
+[✅] Worker 2: https://elliottsax-discovery-worker-2.hf.space
+[ ] Worker 3: https://___________-discovery-worker-3.hf.space
+[✅] Added to .env file
+[✅] Tested with curl
+
+Deploy at: https://huggingface.co/new-space
+Files: cloud/huggingface/app.py, requirements.txt
+
+GOOGLE COLAB (GPU)
+────────────────────────────────────────────────────────────────────
+[ ] Notebook uploaded to Google Drive
+[ ] Opened in Colab
+[ ] GPU enabled (T4)
+[ ] ngrok token obtained
+[ ] Worker running
+[ ] URL: https://_____________________.ngrok.io
+[ ] Added to .env as COLAB_GPU_WORKER
+
+File: cloud/colab/discovery_worker.ipynb
+
+KAGGLE (Optional - GPU)
+────────────────────────────────────────────────────────────────────
+[ ] Account created
+[ ] Notebook created with GPU
+[ ] Internet enabled
+[ ] Worker running
+[ ] URL: _____________________
+[ ] Added to .env
+
+OTHER PLATFORMS (Optional)
+────────────────────────────────────────────────────────────────────
+[ ] Railway: _____________________
+[ ] Render: _____________________
+[ ] Fly.io: _____________________
+
+TOTAL COMPUTE DEPLOYED:
+────────────────────────────────────────────────────────────────────
+CPU Cores: 12 (6 HF + 6 Oracle paid) (target: 8-20) ✅
+RAM: 96 GB (48 HF + 48 Oracle) (target: 50-120 GB) ✅
+GPUs: 0 (target: 1-2)
+Monthly Cost: $16/month (Oracle paid)
+
+VERIFICATION
+────────────────────────────────────────────────────────────────────
+[ ] Ran: python3 cloud/monitor/check_all_workers.py
+[ ] All workers show as healthy
+[ ] .env file updated with all worker URLs
+[ ] Tested analysis request on at least one worker
+
+NOTES:
+────────────────────────────────────────────────────────────────────
+2025-12-16: Successfully deployed HuggingFace Worker 1!
+- 2 CPU cores, 16GB RAM
+- Healthy and responding at /health endpoint
+- Added to .env as HUGGINGFACE_WORKER_1
+
+────────────────────────────────────────────────────────────────────
+
+Last Updated: 2025-12-16 01:20 UTC
