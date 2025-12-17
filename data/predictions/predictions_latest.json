@@ -1,0 +1,87 @@
+[
+  {
+    "ticker": "NVDA",
+    "prediction": "UP",
+    "confidence": 0.78,
+    "probability_up": 0.78,
+    "probability_down": 0.22,
+    "model": "ensemble",
+    "prediction_date": "2025-12-16",
+    "recent_trade_count": 12,
+    "features": {
+      "trade_count": 12.0,
+      "buy_ratio": 0.92,
+      "consensus_strength": 0.85,
+      "recency_score": 8.5,
+      "volume_trend": 0.65
+    }
+  },
+  {
+    "ticker": "AAPL",
+    "prediction": "UP",
+    "confidence": 0.72,
+    "probability_up": 0.72,
+    "probability_down": 0.28,
+    "model": "ensemble",
+    "prediction_date": "2025-12-16",
+    "recent_trade_count": 15,
+    "features": {
+      "trade_count": 15.0,
+      "buy_ratio": 0.87,
+      "consensus_strength": 0.73,
+      "recency_score": 7.2,
+      "volume_trend": 0.58
+    }
+  },
+  {
+    "ticker": "MSFT",
+    "prediction": "UP",
+    "confidence": 0.69,
+    "probability_up": 0.69,
+    "probability_down": 0.31,
+    "model": "ensemble",
+    "prediction_date": "2025-12-16",
+    "recent_trade_count": 14,
+    "features": {
+      "trade_count": 14.0,
+      "buy_ratio": 0.86,
+      "consensus_strength": 0.71,
+      "recency_score": 6.8,
+      "volume_trend": 0.52
+    }
+  },
+  {
+    "ticker": "TSLA",
+    "prediction": "DOWN",
+    "confidence": 0.64,
+    "probability_up": 0.36,
+    "probability_down": 0.64,
+    "model": "ensemble",
+    "prediction_date": "2025-12-16",
+    "recent_trade_count": 8,
+    "features": {
+      "trade_count": 8.0,
+      "buy_ratio": 0.38,
+      "consensus_strength": 0.42,
+      "recency_score": 4.5,
+      "volume_trend": 0.31
+    }
+  },
+  {
+    "ticker": "GOOGL",
+    "prediction": "UP",
+    "confidence": 0.66,
+    "probability_up": 0.66,
+    "probability_down": 0.34,
+    "model": "ensemble",
+    "prediction_date": "2025-12-16",
+    "recent_trade_count": 11,
+    "features": {
+      "trade_count": 11.0,
+      "buy_ratio": 0.82,
+      "consensus_strength": 0.68,
+      "recency_score": 6.3,
+      "volume_trend": 0.48
+    }
+  }
+]

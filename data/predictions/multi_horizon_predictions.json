@@ -1,0 +1,164 @@
+{
+  "NVDA": {
+    "summary": {
+      "consensus": "UP",
+      "confidence_avg": 0.73,
+      "agreement_score": 1.0,
+      "short_term": "UP",
+      "long_term": "UP",
+      "num_horizons": 5,
+      "up_count": 5,
+      "down_count": 0
+    },
+    "predictions": {
+      "7d": {
+        "prediction": "UP",
+        "confidence": 0.85,
+        "confidence_original": 0.85,
+        "confidence_decay_factor": 1.0,
+        "probability_up": 0.85,
+        "horizon_days": 7
+      },
+      "14d": {
+        "prediction": "UP",
+        "confidence": 0.79,
+        "confidence_original": 0.82,
+        "confidence_decay_factor": 0.96,
+        "probability_up": 0.82,
+        "horizon_days": 14
+      },
+      "30d": {
+        "prediction": "UP",
+        "confidence": 0.72,
+        "confidence_original": 0.78,
+        "confidence_decay_factor": 0.92,
+        "probability_up": 0.78,
+        "horizon_days": 30
+      },
+      "60d": {
+        "prediction": "UP",
+        "confidence": 0.63,
+        "confidence_original": 0.74,
+        "confidence_decay_factor": 0.85,
+        "probability_up": 0.74,
+        "horizon_days": 60
+      },
+      "90d": {
+        "prediction": "UP",
+        "confidence": 0.56,
+        "confidence_original": 0.71,
+        "confidence_decay_factor": 0.79,
+        "probability_up": 0.71,
+        "horizon_days": 90
+      }
+    }
+  },
+  "AAPL": {
+    "summary": {
+      "consensus": "UP",
+      "confidence_avg": 0.68,
+      "agreement_score": 0.8,
+      "short_term": "UP",
+      "long_term": "DOWN",
+      "num_horizons": 5,
+      "up_count": 4,
+      "down_count": 1
+    },
+    "predictions": {
+      "7d": {
+        "prediction": "UP",
+        "confidence": 0.82,
+        "confidence_original": 0.82,
+        "confidence_decay_factor": 1.0,
+        "probability_up": 0.82,
+        "horizon_days": 7
+      },
+      "14d": {
+        "prediction": "UP",
+        "confidence": 0.76,
+        "confidence_original": 0.79,
+        "confidence_decay_factor": 0.96,
+        "probability_up": 0.79,
+        "horizon_days": 14
+      },
+      "30d": {
+        "prediction": "UP",
+        "confidence": 0.68,
+        "confidence_original": 0.74,
+        "confidence_decay_factor": 0.92,
+        "probability_up": 0.74,
+        "horizon_days": 30
+      },
+      "60d": {
+        "prediction": "UP",
+        "confidence": 0.58,
+        "confidence_original": 0.68,
+        "confidence_decay_factor": 0.85,
+        "probability_up": 0.68,
+        "horizon_days": 60
+      },
+      "90d": {
+        "prediction": "DOWN",
+        "confidence": 0.56,
+        "confidence_original": 0.48,
+        "confidence_decay_factor": 0.79,
+        "probability_up": 0.48,
+        "horizon_days": 90
+      }
+    }
+  },
+  "MSFT": {
+    "summary": {
+      "consensus": "UP",
+      "confidence_avg": 0.66,
+      "agreement_score": 0.8,
+      "short_term": "UP",
+      "long_term": "DOWN",
+      "num_horizons": 5,
+      "up_count": 4,
+      "down_count": 1
+    },
+    "predictions": {
+      "7d": {
+        "prediction": "UP",
+        "confidence": 0.79,
+        "confidence_original": 0.79,
+        "confidence_decay_factor": 1.0,
+        "probability_up": 0.79,
+        "horizon_days": 7
+      },
+      "14d": {
+        "prediction": "UP",
+        "confidence": 0.73,
+        "confidence_original": 0.76,
+        "confidence_decay_factor": 0.96,
+        "probability_up": 0.76,
+        "horizon_days": 14
+      },
+      "30d": {
+        "prediction": "UP",
+        "confidence": 0.65,
+        "confidence_original": 0.71,
+        "confidence_decay_factor": 0.92,
+        "probability_up": 0.71,
+        "horizon_days": 30
+      },
+      "60d": {
+        "prediction": "UP",
+        "confidence": 0.54,
+        "confidence_original": 0.64,
+        "confidence_decay_factor": 0.85,
+        "probability_up": 0.64,
+        "horizon_days": 60
+      },
+      "90d": {
+        "prediction": "DOWN",
+        "confidence": 0.59,
+        "confidence_original": 0.42,
+        "confidence_decay_factor": 0.79,
+        "probability_up": 0.42,
+        "horizon_days": 90
+      }
+    }
+  }
+}

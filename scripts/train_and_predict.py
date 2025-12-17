@@ -27,6 +27,9 @@ from analysis.backtesting.prediction_strategy import (
     AdaptivePredictionStrategy,
     ConsensusBoostStrategy
 )
+from ml_models.stock_predictor import MultiHorizonPredictor
+from ml_models.model_explainer import ModelExplainer, create_explainer_for_predictor
+import numpy as np
 
 # Load environment
 load_dotenv()
@@ -51,6 +54,8 @@ class PredictionPipeline:
         }
 
         self.prediction_service = PredictionService(model_dir='data/models')
+        self.multi_horizon_predictor = MultiHorizonPredictor(model_dir='data/models')
+        self.use_mock_data = False
 
     def load_trades_from_db(self) -> List[Dict]:
         """Load trades from PostgreSQL"""
@@ -91,6 +96,93 @@ class PredictionPipeline:
         except Exception as e:
             logger.error(f"Error loading trades from DB: {e}")
             return []
+
+    def generate_mock_trades(self, count: int = 500) -> List[Dict]:
+        """Generate mock trading data for testing/training"""
+        logger.info(f"Generating {count} mock trades...")
+
+        tickers = ['NVDA', 'AAPL', 'MSFT', 'TSLA', 'GOOGL', 'AMZN', 'META', 'NFLX',
+                   'AMD', 'CRM', 'ORCL', 'INTC', 'CSCO', 'ADBE', 'QCOM']
+
+        politicians = [
+            {'name': 'Nancy Pelosi', 'party': 'D', 'chamber': 'House', 'state': 'CA'},
+            {'name': 'Mitch McConnell', 'party': 'R', 'chamber': 'Senate', 'state': 'KY'},
+            {'name': 'AOC', 'party': 'D', 'chamber': 'House', 'state': 'NY'},
+            {'name': 'Ted Cruz', 'party': 'R', 'chamber': 'Senate', 'state': 'TX'},
+            {'name': 'Elizabeth Warren', 'party': 'D', 'chamber': 'Senate', 'state': 'MA'},
+            {'name': 'Josh Hawley', 'party': 'R', 'chamber': 'Senate', 'state': 'MO'},
+            {'name': 'Ro Khanna', 'party': 'D', 'chamber': 'House', 'state': 'CA'},
+            {'name': 'Dan Crenshaw', 'party': 'R', 'chamber': 'House', 'state': 'TX'}
+        ]
+
+        trades = []
+        base_date = datetime.now() - timedelta(days=730)  # 2 years of history
+
+        for i in range(count):
+            trade_date = base_date + timedelta(days=i % 720)
+            disclosure_date = trade_date + timedelta(days=15 + (i % 30))
+
+            pol = politicians[i % len(politicians)]
+            ticker = tickers[i % len(tickers)]
+
+            # Bias towards purchases
+            is_purchase = (i % 4) != 0
+
+            trade = {
+                'id': i + 1,
+                'politician_name': pol['name'],
+                'ticker': ticker,
+                'transaction_date': trade_date,
+                'transaction_type': 'purchase' if is_purchase else 'sale',
+                'amount_min': 15000 + (i * 500),
+                'amount_max': 50000 + (i * 1000),
+                'disclosure_date': disclosure_date,
+                'chamber': pol['chamber'],
+                'state': pol['state'],
+                'party': pol['party']
+            }
+
+            trades.append(trade)
+
+        logger.info(f"Generated {len(trades)} mock trades")
+        self.use_mock_data = True
+        return trades
+
+    def generate_synthetic_prices(
+        self,
+        tickers: List[str],
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[str, pd.DataFrame]:
+        """Generate synthetic price data (fallback when yfinance fails)"""
+        logger.info(f"Generating synthetic prices for {len(tickers)} tickers...")
+
+        price_data = {}
+        dates = pd.date_range(start_date, end_date, freq='D')
+
+        for ticker in tickers:
+            # Start price varies by ticker
+            base_price = 100 + (hash(ticker) % 400)
+
+            # Random walk with drift
+            np.random.seed(hash(ticker) % 10000)
+            returns = np.random.normal(0.0005, 0.02, len(dates))  # ~12% annual return, 30% volatility
+            prices = base_price * np.exp(np.cumsum(returns))
+
+            # Create DataFrame
+            df = pd.DataFrame({
+                'open': prices * (1 + np.random.normal(0, 0.01, len(prices))),
+                'high': prices * (1 + abs(np.random.normal(0, 0.015, len(prices)))),
+                'low': prices * (1 - abs(np.random.normal(0, 0.015, len(prices)))),
+                'close': prices,
+                'volume': np.random.randint(1000000, 10000000, len(prices)),
+                'adj close': prices
+            }, index=dates)
+
+            price_data[ticker] = df
+
+        logger.info(f"Generated synthetic data for {len(price_data)} tickers")
+        return price_data
 
     def download_price_data(
         self,
@@ -313,8 +405,8 @@ def main():
     trades = pipeline.load_trades_from_db()
 
     if not trades:
-        logger.error("No trades loaded - exiting")
-        return
+        logger.warning("No trades in database - using mock data")
+        trades = pipeline.generate_mock_trades(count=500)
 
     # Get unique tickers
     tickers = list(set(t.get('ticker', '').upper() for t in trades if t.get('ticker')))
@@ -324,10 +416,15 @@ def main():
     start_date = datetime.now() - timedelta(days=900)  # ~2.5 years
     end_date = datetime.now()
 
-    price_data = pipeline.download_price_data(tickers, start_date, end_date)
+    if pipeline.use_mock_data:
+        # Use synthetic prices for mock data
+        logger.info("Using synthetic price data...")
+        price_data = pipeline.generate_synthetic_prices(tickers, start_date, end_date)
+    else:
+        price_data = pipeline.download_price_data(tickers, start_date, end_date)
 
     if not price_data:
-        logger.error("No price data downloaded - exiting")
+        logger.error("No price data available - exiting")
         return
 
     # 2. Train models
@@ -356,7 +453,103 @@ def main():
         result = pipeline.run_backtest(trades, price_data, strategy_name)
         backtest_results[strategy_name] = result
 
-    # 5. Summary
+    # 5. Multi-horizon predictions
+    logger.info("\nStep 5: Generating multi-horizon predictions...")
+    print("\n" + "="*80)
+    print("MULTI-HORIZON PREDICTIONS")
+    print("="*80)
+
+    top_tickers = tickers[:5]  # Top 5 tickers
+    multi_horizon_results = {}
+
+    for ticker in top_tickers:
+        logger.info(f"Predicting {ticker} across 5 horizons...")
+        try:
+            predictions = pipeline.multi_horizon_predictor.predict_all_horizons(
+                ticker,
+                trades,
+                datetime.now(),
+                price_data.get(ticker)
+            )
+
+            summary = pipeline.multi_horizon_predictor.get_horizon_summary(predictions)
+            multi_horizon_results[ticker] = {
+                'predictions': predictions,
+                'summary': summary
+            }
+
+            # Display
+            print(f"\n{ticker}:")
+            print(f"  Consensus: {summary['consensus']}")
+            print(f"  Agreement: {summary['agreement_score']:.2%}")
+            print(f"  Avg Confidence: {summary['confidence_avg']:.2%}")
+            print(f"  7d: {summary['short_term']}, 90d: {summary['long_term']}")
+
+        except Exception as e:
+            logger.error(f"Multi-horizon prediction failed for {ticker}: {e}")
+
+    # Save multi-horizon predictions
+    output_dir = Path('data/predictions')
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    multi_horizon_file = output_dir / 'multi_horizon_predictions.json'
+    with open(multi_horizon_file, 'w') as f:
+        # Convert datetime objects to strings
+        saveable = {}
+        for ticker, data in multi_horizon_results.items():
+            saveable[ticker] = {
+                'summary': data['summary'],
+                'predictions': {k: v for k, v in data['predictions'].items()}
+            }
+        json.dump(saveable, f, indent=2, default=str)
+
+    logger.info(f"Saved multi-horizon predictions to {multi_horizon_file}")
+
+    # 6. Model explainability
+    logger.info("\nStep 6: Generating model explanations...")
+    print("\n" + "="*80)
+    print("MODEL EXPLAINABILITY (SHAP)")
+    print("="*80)
+
+    try:
+        # Get feature names from prediction service
+        feature_extractor = pipeline.prediction_service.predictor.feature_extractor
+
+        # Create explainer for the best model
+        explainer = create_explainer_for_predictor(
+            pipeline.prediction_service.predictor,
+            list(feature_extractor.feature_names) if hasattr(feature_extractor, 'feature_names') else []
+        )
+
+        # Explain top 3 predictions
+        for i, pred in enumerate(predictions[:3], 1):
+            ticker = pred['ticker']
+            print(f"\n{'='*60}")
+            print(f"Explanation {i}: {ticker}")
+            print('='*60)
+
+            # Get features for this prediction
+            if 'features' in pred:
+                features_dict = pred['features']
+                features_array = np.array([list(features_dict.values())])
+
+                explanation = explainer.explain_prediction(features_array)
+
+                print(f"\nPrediction: {pred['prediction']}")
+                print(f"Confidence: {pred['confidence']:.2%}")
+                print("\nTop Contributing Factors:")
+                for factor in explanation['top_positive'][:5]:
+                    print(f"  + {factor['feature']}: {factor['contribution']:+.3f}")
+
+                print("\nTop Opposing Factors:")
+                for factor in explanation['top_negative'][:3]:
+                    print(f"  - {factor['feature']}: {factor['contribution']:+.3f}")
+
+    except Exception as e:
+        logger.error(f"Explainability generation failed: {e}")
+        logger.debug("Stack trace:", exc_info=True)
+
+    # 7. Summary
     print("\n" + "="*80)
     print("SUMMARY")
     print("="*80)
@@ -379,10 +572,13 @@ def main():
     print("COMPLETE!")
     print("="*80 + "\n")
 
-    print("Next steps:")
-    print("- View predictions: data/predictions/predictions_latest.json")
-    print("- View models: data/models/predictor_models_latest.pkl")
+    print("Generated files:")
+    print("- Single-horizon predictions: data/predictions/predictions_latest.json")
+    print("- Multi-horizon predictions: data/predictions/multi_horizon_predictions.json")
+    print("- Trained models: data/models/predictor_models_latest.pkl")
+    print("\nNext steps:")
     print("- Run backtests: python scripts/run_backtest_analysis.py")
+    print("- View predictions: cat data/predictions/predictions_latest.json")
     print()
 
 
