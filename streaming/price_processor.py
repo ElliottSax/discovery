@@ -148,9 +148,50 @@ class PriceStreamProcessor(BaseStreamProcessor):
 
         try:
             # Query database for recent trades on this ticker
-            # TODO: Implement actual database query
-            # For now, return empty list
-            return []
+            cutoff_date = datetime.now() - timedelta(days=30)
+
+            query = """
+                SELECT
+                    t.id,
+                    t.ticker,
+                    t.transaction_date,
+                    t.disclosure_date,
+                    t.transaction_type,
+                    t.amount_min,
+                    t.amount_max,
+                    p.name as politician,
+                    p.party,
+                    p.chamber
+                FROM trades t
+                LEFT JOIN politicians p ON t.politician_id = p.id
+                WHERE
+                    UPPER(t.ticker) = UPPER(%s)
+                    AND t.disclosure_date >= %s
+                ORDER BY t.disclosure_date DESC
+            """
+
+            cursor = self.database.cursor()
+            cursor.execute(query, (ticker, cutoff_date))
+
+            trades = []
+            for row in cursor.fetchall():
+                trades.append({
+                    'id': row[0],
+                    'ticker': row[1],
+                    'transaction_date': row[2],
+                    'disclosure_date': row[3],
+                    'transaction_type': row[4],
+                    'amount_min': float(row[5]) if row[5] else None,
+                    'amount_max': float(row[6]) if row[6] else None,
+                    'politician': row[7],
+                    'party': row[8],
+                    'chamber': row[9]
+                })
+
+            cursor.close()
+
+            logger.debug(f"Found {len(trades)} active trades for {ticker}")
+            return trades
 
         except Exception as e:
             logger.error(f"Failed to query active trades: {e}")
@@ -203,9 +244,13 @@ class PriceStreamProcessor(BaseStreamProcessor):
                 # Selling - profit if price goes down
                 profit_direction = -price_change_pct
 
-            # TODO: Calculate abnormal return (vs S&P 500)
-            # For now, just use raw price change
-            abnormal_return = price_change_pct
+            # Calculate abnormal return (vs S&P 500)
+            abnormal_return = await self._calculate_abnormal_return(
+                ticker,
+                disclosure_date,
+                disclosure_price,
+                current_price
+            )
 
             return {
                 'trade_id': trade.get('id'),
@@ -240,14 +285,117 @@ class PriceStreamProcessor(BaseStreamProcessor):
             except Exception:
                 pass
 
-        # Fetch from historical data
-        # TODO: Implement historical price lookup
-        # For now, use recent prices as approximation
+        # Fetch from historical data via yfinance
+        try:
+            import yfinance as yf
+            from datetime import datetime as dt
+
+            # Parse disclosure date
+            if isinstance(disclosure_date, str):
+                disc_date = dt.fromisoformat(disclosure_date.replace('Z', ''))
+            else:
+                disc_date = disclosure_date
+
+            # Fetch historical data (3 days window to handle weekends/holidays)
+            start_date = disc_date - timedelta(days=3)
+            end_date = disc_date + timedelta(days=1)
+
+            stock = yf.Ticker(ticker)
+            hist = stock.history(start=start_date, end=end_date)
+
+            if not hist.empty:
+                # Get closest date's closing price
+                closest_price = hist['Close'].iloc[0]
+                price = float(closest_price)
+
+                # Cache for future use
+                if self.event_stream.redis:
+                    try:
+                        self.event_stream.redis.setex(
+                            cache_key,
+                            86400 * 30,  # Cache for 30 days
+                            str(price)
+                        )
+                    except Exception:
+                        pass
+
+                return price
+
+        except ImportError:
+            logger.debug("yfinance not available, using fallback")
+        except Exception as e:
+            logger.debug(f"Failed to fetch historical price: {e}")
+
+        # Fallback: use recent prices as approximation
         if ticker in self.recent_prices and self.recent_prices[ticker]:
             # Use oldest recent price as approximation
             return self.recent_prices[ticker][0]['price']
 
         return None
+
+    async def _calculate_abnormal_return(
+        self,
+        ticker: str,
+        disclosure_date: str,
+        disclosure_price: float,
+        current_price: float
+    ) -> float:
+        """
+        Calculate abnormal return (stock return minus market return)
+
+        Abnormal Return = Stock Return - Market Return
+        """
+        try:
+            # Calculate stock return
+            stock_return_pct = ((current_price - disclosure_price) / disclosure_price) * 100
+
+            # Get S&P 500 prices for same period
+            spy_disclosure_price = await self._get_price_at_disclosure('^GSPC', disclosure_date)
+
+            if not spy_disclosure_price:
+                # No market data available, return raw stock return
+                logger.debug("No S&P 500 data available, using raw return")
+                return stock_return_pct
+
+            # Get current S&P 500 price
+            spy_current_price = None
+
+            # Try to get from recent prices first
+            if '^GSPC' in self.recent_prices and self.recent_prices['^GSPC']:
+                spy_current_price = self.recent_prices['^GSPC'][-1]['price']
+
+            if not spy_current_price:
+                # Fetch current S&P 500 price
+                try:
+                    import yfinance as yf
+                    spy = yf.Ticker('^GSPC')
+                    spy_info = spy.history(period='1d')
+                    if not spy_info.empty:
+                        spy_current_price = float(spy_info['Close'].iloc[-1])
+                except:
+                    pass
+
+            if not spy_current_price:
+                # No current market data, return raw stock return
+                return stock_return_pct
+
+            # Calculate market return
+            market_return_pct = ((spy_current_price - spy_disclosure_price) / spy_disclosure_price) * 100
+
+            # Abnormal return = Stock return - Market return
+            abnormal_return = stock_return_pct - market_return_pct
+
+            logger.debug(
+                f"Abnormal return: {ticker} {abnormal_return:.2f}% "
+                f"(stock: {stock_return_pct:.2f}%, market: {market_return_pct:.2f}%)"
+            )
+
+            return abnormal_return
+
+        except Exception as e:
+            logger.error(f"Error calculating abnormal return: {e}")
+            # Fallback to raw stock return
+            return ((current_price - disclosure_price) / disclosure_price) * 100
 
     def _is_significant_impact(self, impact: Dict) -> bool:
         """Determine if price impact is significant"""
