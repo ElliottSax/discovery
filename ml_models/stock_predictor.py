@@ -566,4 +566,233 @@ class BaselinePredictor:
         }
 
 
-__all__ = ['StockPricePredictor', 'BaselinePredictor']
+class MultiHorizonPredictor:
+    """
+    Multi-horizon stock price predictor
+
+    Predicts stock price direction at multiple time horizons:
+    - 7 days
+    - 14 days
+    - 30 days
+    - 60 days
+    - 90 days
+
+    Each horizon has a separate trained model with horizon-specific features.
+    """
+
+    def __init__(self, model_dir: str = 'data/models'):
+        """
+        Initialize multi-horizon predictor
+
+        Args:
+            model_dir: Directory to save/load trained models
+        """
+        self.model_dir = Path(model_dir)
+        self.model_dir.mkdir(parents=True, exist_ok=True)
+
+        self.horizons = [7, 14, 30, 60, 90]
+        self.predictors = {}
+
+        # Initialize predictor for each horizon
+        for horizon in self.horizons:
+            self.predictors[horizon] = StockPricePredictor(
+                prediction_horizon_days=horizon,
+                model_dir=str(self.model_dir)
+            )
+
+        logger.info(f"Initialized multi-horizon predictor with {len(self.horizons)} horizons")
+
+    def train_all_horizons(
+        self,
+        trades: List[Dict],
+        price_data: Dict[str, pd.DataFrame],
+        start_date: datetime,
+        end_date: datetime
+    ) -> Dict[int, Dict]:
+        """
+        Train models for all horizons
+
+        Args:
+            trades: Politician trades
+            price_data: Historical price data
+            start_date: Training start date
+            end_date: Training end date
+
+        Returns:
+            Dict mapping horizon to training results
+        """
+        results = {}
+
+        for horizon in self.horizons:
+            logger.info(f"Training {horizon}-day horizon model...")
+
+            predictor = self.predictors[horizon]
+
+            # Prepare training data
+            X, y, tickers = predictor.prepare_training_data(
+                trades,
+                price_data,
+                start_date,
+                end_date
+            )
+
+            if len(X) < 10:
+                logger.warning(f"Insufficient data for {horizon}-day horizon")
+                results[horizon] = {'error': 'insufficient_data'}
+                continue
+
+            # Train models
+            accuracies = predictor.train(X, y)
+
+            results[horizon] = {
+                'accuracies': accuracies,
+                'samples': len(X),
+                'horizon_days': horizon
+            }
+
+            logger.info(f"{horizon}-day horizon trained: {accuracies}")
+
+        return results
+
+    def predict_all_horizons(
+        self,
+        ticker: str,
+        trades: List[Dict],
+        current_date: datetime,
+        price_history: Optional[pd.DataFrame] = None
+    ) -> Dict[str, Dict]:
+        """
+        Make predictions for all horizons
+
+        Args:
+            ticker: Stock ticker
+            trades: Politician trades
+            current_date: Current date
+            price_history: Optional price history
+
+        Returns:
+            Dict mapping horizon string (e.g., '7d') to prediction
+        """
+        predictions = {}
+
+        for horizon in self.horizons:
+            predictor = self.predictors[horizon]
+
+            try:
+                pred = predictor.predict(
+                    ticker,
+                    trades,
+                    current_date,
+                    price_history
+                )
+
+                # Add horizon info
+                pred['horizon_days'] = horizon
+                predictions[f'{horizon}d'] = pred
+
+            except Exception as e:
+                logger.error(f"Prediction failed for {horizon}-day horizon: {e}")
+                predictions[f'{horizon}d'] = {
+                    'error': str(e),
+                    'horizon_days': horizon
+                }
+
+        # Calculate confidence decay
+        predictions = self._apply_confidence_decay(predictions)
+
+        return predictions
+
+    def _apply_confidence_decay(self, predictions: Dict[str, Dict]) -> Dict[str, Dict]:
+        """
+        Apply confidence decay for longer horizons
+
+        Confidence naturally decreases with prediction horizon due to uncertainty.
+        """
+        for horizon_str, pred in predictions.items():
+            if 'error' in pred:
+                continue
+
+            horizon_days = pred.get('horizon_days', 30)
+
+            # Decay factor: 0% decay at 7 days, 30% decay at 90 days
+            decay_factor = 1.0 - (horizon_days - 7) / (90 - 7) * 0.3
+            decay_factor = max(0.7, min(1.0, decay_factor))
+
+            # Apply decay to confidence
+            original_confidence = pred.get('confidence', 0.5)
+            decayed_confidence = original_confidence * decay_factor
+
+            pred['confidence_original'] = original_confidence
+            pred['confidence'] = decayed_confidence
+            pred['confidence_decay_factor'] = decay_factor
+
+        return predictions
+
+    def save_all_models(self, suffix: str = ''):
+        """Save all horizon models"""
+        for horizon, predictor in self.predictors.items():
+            predictor.save_models(suffix=f'_{horizon}d{suffix}')
+
+        logger.info(f"Saved all multi-horizon models with suffix '{suffix}'")
+
+    def load_all_models(self, suffix: str = ''):
+        """Load all horizon models"""
+        for horizon, predictor in self.predictors.items():
+            predictor.load_models(suffix=f'_{horizon}d{suffix}')
+
+        logger.info(f"Loaded all multi-horizon models with suffix '{suffix}'")
+
+    def get_horizon_summary(self, predictions: Dict[str, Dict]) -> Dict:
+        """
+        Get summary of multi-horizon predictions
+
+        Returns:
+            {
+                'consensus': 'UP' | 'DOWN' | 'MIXED',
+                'confidence_avg': float,
+                'short_term': '7d prediction',
+                'long_term': '90d prediction',
+                'agreement_score': float  # 0-1, how much horizons agree
+            }
+        """
+        if not predictions:
+            return {'error': 'no predictions'}
+
+        # Filter out errors
+        valid_preds = {k: v for k, v in predictions.items() if 'error' not in v}
+
+        if not valid_preds:
+            return {'error': 'all predictions failed'}
+
+        # Count UP vs DOWN
+        up_count = sum(1 for p in valid_preds.values() if p.get('prediction') == 'UP')
+        down_count = len(valid_preds) - up_count
+
+        # Consensus
+        if up_count > down_count:
+            consensus = 'UP'
+        elif down_count > up_count:
+            consensus = 'DOWN'
+        else:
+            consensus = 'MIXED'
+
+        # Agreement score (1.0 = all agree, 0.5 = split)
+        agreement_score = max(up_count, down_count) / len(valid_preds)
+
+        # Average confidence
+        confidences = [p.get('confidence', 0) for p in valid_preds.values()]
+        confidence_avg = np.mean(confidences) if confidences else 0.0
+
+        return {
+            'consensus': consensus,
+            'confidence_avg': float(confidence_avg),
+            'agreement_score': float(agreement_score),
+            'short_term': valid_preds.get('7d', {}).get('prediction', 'UNKNOWN'),
+            'long_term': valid_preds.get('90d', {}).get('prediction', 'UNKNOWN'),
+            'num_horizons': len(valid_preds),
+            'up_count': up_count,
+            'down_count': down_count
+        }
+
+
+__all__ = ['StockPricePredictor', 'BaselinePredictor', 'MultiHorizonPredictor']
