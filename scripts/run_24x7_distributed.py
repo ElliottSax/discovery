@@ -41,7 +41,7 @@ class Distributed24x7System:
 
     def __init__(
         self,
-        analysis_interval_minutes: int = 30,
+        analysis_interval_seconds: int = 5,
         max_consecutive_failures: int = 5,
         trades_per_cycle: int = 500
     ):
@@ -49,11 +49,11 @@ class Distributed24x7System:
         Initialize 24/7 distributed system
 
         Args:
-            analysis_interval_minutes: Minutes between analysis cycles
+            analysis_interval_seconds: Seconds between analysis cycles (0 = continuous)
             max_consecutive_failures: Max failures before alerting
             trades_per_cycle: Number of trades to analyze per cycle
         """
-        self.analysis_interval = timedelta(minutes=analysis_interval_minutes)
+        self.analysis_interval = timedelta(seconds=analysis_interval_seconds)
         self.max_consecutive_failures = max_consecutive_failures
         self.trades_per_cycle = trades_per_cycle
 
@@ -95,7 +95,13 @@ class Distributed24x7System:
         logger.info("="*80)
         logger.info("STARTING 24/7 DISTRIBUTED QUANT ANALYSIS SYSTEM")
         logger.info("="*80)
-        logger.info(f"Analysis interval: {self.analysis_interval.total_seconds() / 60} minutes")
+        interval_sec = self.analysis_interval.total_seconds()
+        if interval_sec == 0:
+            logger.info(f"Analysis interval: CONTINUOUS (no delay)")
+        elif interval_sec < 60:
+            logger.info(f"Analysis interval: {interval_sec} seconds")
+        else:
+            logger.info(f"Analysis interval: {interval_sec / 60} minutes")
         logger.info(f"Max consecutive failures: {self.max_consecutive_failures}")
         logger.info(f"Trades per cycle: {self.trades_per_cycle}")
         logger.info(f"Workers available: {len(self.analyzer.workers)}")
@@ -156,10 +162,15 @@ class Distributed24x7System:
             sleep_time = self.analysis_interval - cycle_duration
 
             if sleep_time.total_seconds() > 0:
-                logger.info(f"💤 Sleeping for {sleep_time.total_seconds() / 60:.1f} minutes...")
+                if sleep_time.total_seconds() < 60:
+                    logger.info(f"💤 Sleeping for {sleep_time.total_seconds():.1f} seconds...")
+                else:
+                    logger.info(f"💤 Sleeping for {sleep_time.total_seconds() / 60:.1f} minutes...")
                 await asyncio.sleep(sleep_time.total_seconds())
-            else:
+            elif self.analysis_interval.total_seconds() > 0:
                 logger.warning(f"⚠️  Cycle took longer than interval! Duration: {cycle_duration}")
+            else:
+                logger.info(f"🔄 Starting next cycle immediately (continuous mode)...")
 
         logger.info("24/7 system stopped.")
 
@@ -329,7 +340,7 @@ async def main():
 
     # Create and run system
     system = Distributed24x7System(
-        analysis_interval_minutes=30,  # Run every 30 minutes
+        analysis_interval_seconds=0,  # 0 = continuous (no delay)
         max_consecutive_failures=5,
         trades_per_cycle=500
     )
