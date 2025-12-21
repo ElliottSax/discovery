@@ -46,7 +46,7 @@ conn = psycopg2.connect(
     port=int(os.getenv('DB_PORT', 5432)),
     database=os.getenv('DB_NAME', 'quant_db'),
     user=os.getenv('DB_USER', 'quant_user'),
-    password=os.getenv('DB_PASSWORD', 'REDACTED_PASSWORD')
+    password=os.getenv('DB_PASSWORD')
 )
 conn.close()
 " 2>/dev/null; then
@@ -68,7 +68,7 @@ conn = psycopg2.connect(
     port=int(os.getenv('DB_PORT', 5432)),
     database=os.getenv('DB_NAME', 'quant_db'),
     user=os.getenv('DB_USER', 'quant_user'),
-    password=os.getenv('DB_PASSWORD', 'REDACTED_PASSWORD')
+    password=os.getenv('DB_PASSWORD')
 )
 with conn.cursor() as cur:
     cur.execute('SELECT COUNT(*) FROM trades')
@@ -89,7 +89,7 @@ conn = psycopg2.connect(
     port=int(os.getenv('DB_PORT', 5432)),
     database=os.getenv('DB_NAME', 'quant_db'),
     user=os.getenv('DB_USER', 'quant_user'),
-    password=os.getenv('DB_PASSWORD', 'REDACTED_PASSWORD')
+    password=os.getenv('DB_PASSWORD')
 )
 with conn.cursor() as cur:
     cur.execute('SELECT COUNT(*) FROM politicians')

@@ -23,7 +23,7 @@ export DB_HOST=localhost \
 && export DB_PORT=5432 \
 && export DB_NAME=quant_db \
 && export DB_USER=quant_user \
-&& export DB_PASSWORD='REDACTED_PASSWORD' \
+&& export DB_PASSWORD='YOUR_DB_PASSWORD' \
 && export GROQ_API_KEY="gsk_..." \
 && nohup python3 -m ai_agents.orchestrator_24x7 > logs/orchestrator.log 2>&1 & echo $!
 
@@ -58,7 +58,7 @@ export DB_HOST=localhost \
 && export DB_PORT=5432 \
 && export DB_NAME=quant_db \
 && export DB_USER=quant_user \
-&& export DB_PASSWORD='REDACTED_PASSWORD' \
+&& export DB_PASSWORD='YOUR_DB_PASSWORD' \
 && nohup python3 -m ai_agents.orchestrator_24x7 > logs/orchestrator.log 2>&1 & echo $!
 
 # 5. Verify
@@ -87,7 +87,7 @@ export DB_HOST=localhost \
 && export DB_PORT=5432 \
 && export DB_NAME=quant_db \
 && export DB_USER=quant_user \
-&& export DB_PASSWORD='REDACTED_PASSWORD' \
+&& export DB_PASSWORD='YOUR_DB_PASSWORD' \
 && export GROQ_API_KEY="gsk_..." \
 && nohup python3 -m ai_agents.orchestrator_24x7 > logs/orchestrator.log 2>&1 & echo $!
 ```

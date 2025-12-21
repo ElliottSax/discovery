@@ -12,6 +12,7 @@ from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 import json
 import logging
+import os
 from pathlib import Path
 
 # Import our modules
@@ -604,11 +605,11 @@ async def get_dashboard_analytics(request: Request = None):
     from psycopg2.extras import RealDictCursor
 
     DB_PARAMS = {
-        'host': 'localhost',
-        'port': 5432,
-        'database': 'quant_db',
-        'user': 'quant_user',
-        'password': 'REDACTED_PASSWORD'
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': int(os.getenv('DB_PORT', 5432)),
+        'database': os.getenv('DB_NAME', 'quant_db'),
+        'user': os.getenv('DB_USER', 'quant_user'),
+        'password': os.getenv('DB_PASSWORD')
     }
 
     top_stocks = []

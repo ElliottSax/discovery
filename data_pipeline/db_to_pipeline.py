@@ -23,7 +23,7 @@ class PipelineGenerator:
             'port': int(os.getenv('DB_PORT', 5432)),
             'database': os.getenv('DB_NAME', 'quant_db'),
             'user': os.getenv('DB_USER', 'quant_user'),
-            'password': os.getenv('DB_PASSWORD', 'REDACTED_PASSWORD')
+            'password': os.getenv('DB_PASSWORD')
         }
         self.output_dir = Path("./data/pipeline")
         self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -314,7 +314,7 @@ class TestDatabaseIntegration:
                 port=int(os.getenv('DB_PORT', 5432)),
                 database=os.getenv('DB_NAME', 'quant_db'),
                 user=os.getenv('DB_USER', 'quant_user'),
-                password=os.getenv('DB_PASSWORD', 'REDACTED_PASSWORD')
+                password=os.getenv('DB_PASSWORD')
             )
             assert conn is not None
             conn.close()
