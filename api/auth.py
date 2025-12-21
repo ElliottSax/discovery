@@ -3,13 +3,25 @@ JWT Authentication for API
 """
 
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 import os
+import secrets
+import logging
 from passlib.context import CryptContext
 
-# Secret key for JWT (in production, use environment variable)
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production")
+logger = logging.getLogger(__name__)
+
+# Secret key for JWT - MUST be set in production
+_jwt_secret = os.getenv("JWT_SECRET_KEY")
+if not _jwt_secret:
+    if os.getenv("APP_ENV", "development") == "production":
+        raise RuntimeError("JWT_SECRET_KEY environment variable is required in production")
+    # Generate a random key for development (will change on restart)
+    _jwt_secret = secrets.token_hex(32)
+    logger.warning("JWT_SECRET_KEY not set - using random key (tokens won't persist across restarts)")
+
+SECRET_KEY = _jwt_secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
@@ -38,9 +50,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

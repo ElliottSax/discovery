@@ -301,7 +301,8 @@ class PredictionService:
                 if cutoff_date <= trade_date <= current_date:
                     ticker_counts[ticker] = ticker_counts.get(ticker, 0) + 1
 
-            except:
+            except (ValueError, TypeError, KeyError) as e:
+                logger.debug(f"Skipping trade due to parse error: {e}")
                 continue
 
         # Filter by minimum trade count

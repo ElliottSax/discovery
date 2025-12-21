@@ -82,8 +82,8 @@ class LLMRouter:
             if response.status_code == 200:
                 logger.info("Ollama detected and available")
                 return "available"  # Use non-None value to indicate availability
-        except:
-            pass
+        except (requests.RequestException, ConnectionError, OSError) as e:
+            logger.debug(f"Ollama not available: {e}")
         return None
 
     def get_available_providers(self) -> List[LLMProvider]:
@@ -260,15 +260,26 @@ class LLMRouter:
         }
 
 
-# Singleton instance
-_router = None
+# Thread-safe singleton using a lock
+import threading
+_router_lock = threading.Lock()
+_router: Optional[LLMRouter] = None
 
 def get_llm_router() -> LLMRouter:
-    """Get global LLM router instance"""
+    """Get global LLM router instance (thread-safe)"""
     global _router
     if _router is None:
-        _router = LLMRouter()
+        with _router_lock:
+            # Double-check locking pattern
+            if _router is None:
+                _router = LLMRouter()
     return _router
+
+def reset_llm_router() -> None:
+    """Reset the global router instance (useful for testing)"""
+    global _router
+    with _router_lock:
+        _router = None
 
 
 async def generate_with_retry(

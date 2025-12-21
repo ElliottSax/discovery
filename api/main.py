@@ -13,7 +13,9 @@ from datetime import datetime, timedelta
 import json
 import logging
 import os
+import asyncio
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 # Import our modules
 from api.models import Trade, Politician, Analysis, Alert
@@ -25,22 +27,39 @@ from data_pipeline.etl_orchestrator import ETLOrchestrator
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting up API server...")
+    rate_limiter.start_cleanup()
+    logger.info("Rate limiter cleanup task started")
+    yield
+    # Shutdown
+    logger.info("Shutting down API server...")
+    if rate_limiter.cleanup_task:
+        rate_limiter.cleanup_task.cancel()
+
 # Create FastAPI app
 app = FastAPI(
     title="Politician Trading Analysis API",
     description="Real-time analysis of politician stock trades",
     version="1.0.0",
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
+    lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - configure allowed origins from environment
+_cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080")
+ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Security
@@ -66,8 +85,20 @@ async def health_check():
 @app.post("/api/v1/auth/login")
 async def login(username: str, password: str):
     """Login and receive access token"""
-    # In production, verify against database
-    if username == "demo" and password == "demo123":
+    from api.auth import verify_password, get_password_hash
+
+    # Get credentials from environment (hash the expected password)
+    api_username = os.getenv("API_USERNAME")
+    api_password_hash = os.getenv("API_PASSWORD_HASH")
+
+    if not api_username or not api_password_hash:
+        logger.error("API credentials not configured - set API_USERNAME and API_PASSWORD_HASH")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication not configured"
+        )
+
+    if username == api_username and verify_password(password, api_password_hash):
         access_token = create_access_token({"sub": username})
         return {
             "access_token": access_token,
@@ -600,47 +631,53 @@ async def get_dashboard_analytics(request: Request = None):
                 'regime_stats': pol.get('hmm_analysis', {}).get('regime_stats', {})
             })
 
-    # Calculate top stocks from database
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
+    # Calculate top stocks from database (run in thread to avoid blocking)
+    def _fetch_db_stats():
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
 
-    DB_PARAMS = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', 5432)),
-        'database': os.getenv('DB_NAME', 'quant_db'),
-        'user': os.getenv('DB_USER', 'quant_user'),
-        'password': os.getenv('DB_PASSWORD')
-    }
+        db_params = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '5432')),
+            'database': os.getenv('DB_NAME', 'quant_db'),
+            'user': os.getenv('DB_USER', 'quant_user'),
+            'password': os.getenv('DB_PASSWORD')
+        }
+
+        stocks = []
+        total = 0
+
+        conn = psycopg2.connect(**db_params)
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT ticker, COUNT(*) as trade_count
+                    FROM trades
+                    WHERE ticker IS NOT NULL
+                    GROUP BY ticker
+                    ORDER BY trade_count DESC
+                    LIMIT 10
+                """)
+                stocks = cur.fetchall()
+
+                cur.execute("SELECT COUNT(*) as total FROM trades")
+                total = cur.fetchone()['total']
+        finally:
+            conn.close()
+
+        return stocks, total
 
     top_stocks = []
     total_trades = 0
 
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # Get top stocks
-            cur.execute("""
-                SELECT ticker, COUNT(*) as trade_count
-                FROM trades
-                WHERE ticker IS NOT NULL
-                GROUP BY ticker
-                ORDER BY trade_count DESC
-                LIMIT 10
-            """)
-            stocks = cur.fetchall()
-
-            for stock in stocks:
-                top_stocks.append({
-                    'ticker': stock['ticker'],
-                    'trades': stock['trade_count'],
-                    'change': round((stock['trade_count'] / 564) * 100, 1)  # Percentage of total
-                })
-
-            # Get total trade count
-            cur.execute("SELECT COUNT(*) as total FROM trades")
-            total_trades = cur.fetchone()['total']
-
-        conn.close()
+        stocks, total_trades = await asyncio.to_thread(_fetch_db_stats)
+        for stock in stocks:
+            top_stocks.append({
+                'ticker': stock['ticker'],
+                'trades': stock['trade_count'],
+                'change': round((stock['trade_count'] / max(total_trades, 1)) * 100, 1)
+            })
     except Exception as e:
         logger.error(f"Database error: {e}")
         # Fallback data
