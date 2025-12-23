@@ -47,6 +47,15 @@ interface AnalyticsData {
   analysisDate: string;
 }
 
+interface Prediction {
+  ticker: string;
+  prediction: 'UP' | 'DOWN';
+  confidence: number;
+  probability_up: number;
+  probability_down: number;
+  recent_trade_count: number;
+}
+
 // Fallback data for offline mode
 const FALLBACK_DATA: AnalyticsData = {
   politicians: [
@@ -70,10 +79,20 @@ const FALLBACK_DATA: AnalyticsData = {
   analysisDate: '2025-11-26'
 };
 
+// Fallback predictions for offline mode
+const FALLBACK_PREDICTIONS: Prediction[] = [
+  { ticker: 'NVDA', prediction: 'UP', confidence: 0.78, probability_up: 0.85, probability_down: 0.15, recent_trade_count: 5 },
+  { ticker: 'META', prediction: 'UP', confidence: 0.72, probability_up: 0.80, probability_down: 0.20, recent_trade_count: 8 },
+  { ticker: 'AAPL', prediction: 'UP', confidence: 0.65, probability_up: 0.72, probability_down: 0.28, recent_trade_count: 4 },
+  { ticker: 'AMZN', prediction: 'DOWN', confidence: 0.58, probability_up: 0.42, probability_down: 0.58, recent_trade_count: 6 },
+  { ticker: 'MSFT', prediction: 'UP', confidence: 0.55, probability_up: 0.65, probability_down: 0.35, recent_trade_count: 3 }
+];
+
 export default function Home() {
   const [selectedPolitician, setSelectedPolitician] = useState(0);
   const [isAnimated, setIsAnimated] = useState(false);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData>(FALLBACK_DATA);
+  const [predictions, setPredictions] = useState<Prediction[]>(FALLBACK_PREDICTIONS);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
 
@@ -98,10 +117,30 @@ export default function Home() {
       }
     };
 
+    // Fetch predictions from API
+    const fetchPredictions = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/v1/predictions?min_confidence=0.5&top_n=10');
+        if (!response.ok) throw new Error('Predictions API unavailable');
+
+        const data = await response.json();
+        if (data.predictions && data.predictions.length > 0) {
+          setPredictions(data.predictions);
+        }
+      } catch (err) {
+        console.warn('Predictions API unavailable, using fallback data:', err);
+        setPredictions(FALLBACK_PREDICTIONS);
+      }
+    };
+
     fetchAnalytics();
+    fetchPredictions();
 
     // Refresh every 60 seconds
-    const interval = setInterval(fetchAnalytics, 60000);
+    const interval = setInterval(() => {
+      fetchAnalytics();
+      fetchPredictions();
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -485,6 +524,73 @@ export default function Home() {
             </motion.div>
           </div>
 
+          {/* ML Predictions Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
+            className="mt-6 bg-gray-800/50 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-gray-700/50"
+          >
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <span className="w-1 h-6 bg-gradient-to-b from-yellow-400 to-orange-400 rounded"></span>
+              ML Stock Predictions
+              <span className="ml-2 text-xs px-2 py-1 bg-yellow-500/20 text-yellow-300 rounded-full">
+                Based on Politician Activity
+              </span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              {predictions.slice(0, 5).map((pred, idx) => (
+                <motion.div
+                  key={pred.ticker}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.1 * idx }}
+                  className={`relative p-4 rounded-xl border ${
+                    pred.prediction === 'UP'
+                      ? 'bg-green-500/10 border-green-500/30'
+                      : 'bg-red-500/10 border-red-500/30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-lg font-bold">{pred.ticker}</span>
+                    <span className={`text-2xl ${pred.prediction === 'UP' ? 'text-green-400' : 'text-red-400'}`}>
+                      {pred.prediction === 'UP' ? '↑' : '↓'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">Confidence</span>
+                      <span className="font-medium">{(pred.confidence * 100).toFixed(0)}%</span>
+                    </div>
+
+                    {/* Confidence bar */}
+                    <div className="w-full bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${pred.prediction === 'UP' ? 'bg-green-400' : 'bg-red-400'}`}
+                        style={{ width: `${pred.confidence * 100}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>↑ {(pred.probability_up * 100).toFixed(0)}%</span>
+                      <span>↓ {(pred.probability_down * 100).toFixed(0)}%</span>
+                    </div>
+
+                    <div className="text-xs text-gray-400 pt-1 border-t border-gray-700">
+                      {pred.recent_trade_count} recent trades
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="mt-4 text-sm text-gray-400 text-center">
+              Predictions based on ML analysis of recent politician trading activity
+            </div>
+          </motion.div>
+
           {/* Footer Info */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -492,8 +598,8 @@ export default function Home() {
             transition={{ duration: 0.6, delay: 0.8 }}
             className="mt-8 text-center text-sm text-gray-500"
           >
-            <p>Analysis powered by FFT Cyclical Detection, Hidden Markov Models, and Dynamic Time Warping</p>
-            <p className="mt-1">Data: 564 trades | Period: Jan 2023 - Dec 2024 | Last updated: {analyticsData.analysisDate}</p>
+            <p>Analysis powered by FFT Cyclical Detection, Hidden Markov Models, Dynamic Time Warping, and ML Predictions</p>
+            <p className="mt-1">Data: {analyticsData.totalTrades} trades | ML Models: XGBoost, Random Forest, LSTM | Last updated: {analyticsData.analysisDate}</p>
           </motion.div>
         </div>
       </div>

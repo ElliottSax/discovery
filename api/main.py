@@ -3,7 +3,7 @@ FastAPI Application for Politician Trading Analysis
 RESTful API with authentication and rate limiting
 """
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
@@ -697,6 +697,252 @@ async def get_dashboard_analytics(request: Request = None):
         'analysisDate': datetime.now().strftime('%Y-%m-%d'),
         'timestamp': datetime.now().isoformat()
     }
+
+# Prediction endpoints
+@app.get("/api/v1/predictions")
+async def get_predictions(
+    ticker: Optional[str] = None,
+    min_confidence: float = 0.5,
+    top_n: int = 20,
+    request: Request = None
+):
+    """
+    Get ML-based stock predictions using politician trading signals
+
+    Returns predictions for stocks with recent politician activity,
+    ranked by confidence score.
+    """
+    # Rate limiting
+    if not await rate_limiter.check_rate_limit(request):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    try:
+        from services.prediction_service import PredictionService
+
+        # Initialize prediction service
+        service = PredictionService(model_dir='data/models')
+
+        # Load trade data
+        data_dir = Path("./data/pipeline")
+        trade_files = list(data_dir.glob("trades_*.json"))
+
+        if not trade_files:
+            return {
+                "predictions": [],
+                "message": "No trade data available for predictions",
+                "generated_at": datetime.now().isoformat()
+            }
+
+        latest_file = max(trade_files, key=lambda p: p.stat().st_mtime)
+        with open(latest_file) as f:
+            trades = json.load(f)
+
+        # Filter by ticker if specified
+        if ticker:
+            trades = [t for t in trades if t.get('ticker') == ticker.upper()]
+
+        # Get predictions
+        predictions = service.predict_from_politician_activity(
+            trades=trades,
+            price_data={},  # Will fetch from yfinance
+            lookback_days=30,
+            min_confidence=min_confidence,
+            top_n=top_n
+        )
+
+        return {
+            "predictions": predictions,
+            "count": len(predictions),
+            "min_confidence": min_confidence,
+            "generated_at": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"Prediction error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prediction service error: {str(e)}"
+        )
+
+
+@app.get("/api/v1/predictions/{ticker}")
+async def get_ticker_prediction(
+    ticker: str,
+    request: Request = None
+):
+    """
+    Get prediction for a specific stock ticker
+
+    Uses politician trading activity and ML models to predict
+    price direction (UP/DOWN) with confidence score.
+    """
+    # Rate limiting
+    if not await rate_limiter.check_rate_limit(request):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    ticker = ticker.upper()
+
+    try:
+        from services.prediction_service import PredictionService
+
+        service = PredictionService(model_dir='data/models')
+
+        # Load trade data
+        data_dir = Path("./data/pipeline")
+        trade_files = list(data_dir.glob("trades_*.json"))
+
+        if not trade_files:
+            raise HTTPException(
+                status_code=404,
+                detail="No trade data available"
+            )
+
+        latest_file = max(trade_files, key=lambda p: p.stat().st_mtime)
+        with open(latest_file) as f:
+            trades = json.load(f)
+
+        # Filter for this ticker
+        ticker_trades = [t for t in trades if t.get('ticker') == ticker]
+
+        if not ticker_trades:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No politician trades found for {ticker}"
+            )
+
+        # Get prediction
+        prediction = service.predict_ticker(
+            ticker=ticker,
+            trades=trades,
+            prediction_date=datetime.now(),
+            price_data=None  # Will fetch from yfinance
+        )
+
+        # Add trade context
+        prediction['recent_trades'] = ticker_trades[:5]
+        prediction['total_trades'] = len(ticker_trades)
+        prediction['politicians'] = list(set(
+            t.get('politician_name') for t in ticker_trades
+            if t.get('politician_name')
+        ))[:10]
+
+        return {
+            "prediction": prediction,
+            "ticker": ticker,
+            "generated_at": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Prediction error for {ticker}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Prediction service error: {str(e)}"
+        )
+
+
+# WebSocket for real-time updates
+class ConnectionManager:
+    """Manage WebSocket connections"""
+
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def broadcast(self, message: dict):
+        """Broadcast message to all connected clients"""
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"WebSocket broadcast error: {e}")
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/trades")
+async def websocket_trades(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time trade updates
+
+    Clients receive:
+    - New trade disclosures as they're detected
+    - Pattern alerts
+    - Prediction updates
+    """
+    await manager.connect(websocket)
+
+    try:
+        while True:
+            # Receive messages from client (for subscriptions)
+            data = await websocket.receive_text()
+
+            try:
+                message = json.loads(data)
+
+                if message.get('type') == 'subscribe':
+                    # Handle subscription requests
+                    tickers = message.get('tickers', [])
+                    await websocket.send_json({
+                        "type": "subscribed",
+                        "tickers": tickers,
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+                elif message.get('type') == 'ping':
+                    await websocket.send_json({
+                        "type": "pong",
+                        "timestamp": datetime.now().isoformat()
+                    })
+
+            except json.JSONDecodeError:
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "Invalid JSON"
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+@app.post("/api/v1/broadcast")
+async def broadcast_update(
+    message: Dict[str, Any],
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Broadcast an update to all WebSocket clients
+
+    Requires authentication. Used internally to push updates.
+    """
+    token = credentials.credentials
+    payload = verify_token(token)
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+    message['timestamp'] = datetime.now().isoformat()
+    message['sender'] = payload.get('sub')
+
+    await manager.broadcast(message)
+
+    return {
+        "status": "broadcasted",
+        "connections": len(manager.active_connections)
+    }
+
 
 # Run the application
 if __name__ == "__main__":
