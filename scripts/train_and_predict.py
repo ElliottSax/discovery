@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 
 # Import our modules
 from services.prediction_service import PredictionService
-from analysis.backtesting.backtest_engine import BacktestEngine
+from analysis.backtesting.engine import BacktestEngine
 from analysis.backtesting.prediction_strategy import (
     MLPredictionStrategy,
     AdaptivePredictionStrategy,
