@@ -21,3 +21,7 @@ def knapsack_01(weights: list[int], values: list[int], capacity: int) -> int:
             dp[w] = max(dp[w], dp[w - weights[i]] + values[i])
 
     return dp[capacity]
+
+
+# Alias for consistency with instance-1
+knapsack = knapsack_01
